@@ -1,0 +1,22 @@
+{
+  "name": "clipper",
+  "version": "1.0.0",
+  "description": "pizda",
+  "main": "server.js",
+  "bin": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "author": "kyoka",
+  "license": "ISC",
+  "dependencies": {
+    "@vk-io/hear": "^1.1.1",
+    "axios": "^1.7.2",
+    "cors": "^2.8.5",
+    "cron-validator": "^1.3.1",
+    "jsonfile": "^6.1.0",
+    "node-cron": "^3.0.3",
+    "tiktokdl": "^0.0.5",
+    "vk-io": "^4.9.1"
+  }
+}
