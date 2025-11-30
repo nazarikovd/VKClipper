@@ -4,6 +4,7 @@
   "homepage": ".",
   "private": true,
   "dependencies": {
+    "axios": "^1.7.2",
     "@testing-library/dom": "^10.4.0",
     "@vkontakte/icons": "^3.7.0",
     "@vkontakte/vkui": "^7.3.4",

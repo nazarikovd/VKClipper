@@ -70,7 +70,7 @@ class ApiClient {
 	}
 }
 
-let apiBaseUrl = 'http://localhost:12000/';
+let apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:12000/';
 
 const api = new ApiClient(apiBaseUrl);
 export default api;
