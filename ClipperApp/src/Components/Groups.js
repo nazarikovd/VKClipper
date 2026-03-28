@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react"
 
 import {
 	Group,
@@ -7,47 +7,48 @@ import {
 	Button,
 	Header,
 	Spinner
-} from "@vkontakte/vkui";
+} from "@vkontakte/vkui"
 
 import {
 	Icon28AddOutline
-} from "@vkontakte/icons";
+} from "@vkontakte/icons"
 
-import GroupCell from "./Group/GroupCell";
-import GroupModal from "./Group/GroupModal";
+import GroupCell from "./Group/GroupCell"
+import GroupModal from "./Group/GroupModal"
 
 const Groups = ({ api }) => {
-	const [groups, setGroups] = useState([]);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState(null);
-	const [activeModal, setActiveModal] = useState(null);
+	const [groups, setGroups] = useState([])
+	const [loading, setLoading] = useState(true)
+	const [error, setError] = useState(null)
+	const [activeModal, setActiveModal] = useState(null)
 
 	const fetchGroups = async () => {
-		setLoading(true);
 		try {
-			const response = await api.call("groups.get");
-			setGroups(response.response);
-			setError(null);
+			const response = await api.call("groups.get")
+			setGroups(response.response)
+			setError(null)
 		} catch (err) {
-			setError(err.error_msg || "Failed to load groups");
+			setError(err.error_msg || "Failed to load groups")
 		} finally {
-			setLoading(false);
+			setLoading(false)
 		}
-	};
+	}
 
 	useEffect(() => {
-		fetchGroups();
-		// eslint-disable-next-line
-	}, []);
+		fetchGroups()
+		
+		const interval = setInterval(fetchGroups, 5000)
+		return () => clearInterval(interval)
+	}, [])
 
 	const handleDeleteGroup = async (groupId) => {
 		try {
-			await api.call("groups.delete", { group_id: groupId });
-			await fetchGroups();
+			await api.call("groups.delete", { group_id: groupId })
+			await fetchGroups()
 		} catch (err) {
-			setError(err.error_msg || "Failed to delete group");
+			setError(err.error_msg || "Failed to delete group")
 		}
-	};
+	}
 
 	if (loading && groups.length === 0) {
 		return (
@@ -56,7 +57,7 @@ const Groups = ({ api }) => {
 					<Spinner />
 				</Div>
 			</Group>
-		);
+		)
 	}
 
 	return (
@@ -91,9 +92,9 @@ const Groups = ({ api }) => {
 						</Div>
 					</Group>
 					<Group header={<Header size="s">Список групп • {groups.length}</Header>}>
-						{groups.map((group, index) => (
+						{groups.map((group) => (
 							<GroupCell
-								key={index}
+								key={group.id}
 								group={group}
 								onDelete={handleDeleteGroup}
 							/>
@@ -111,7 +112,7 @@ const Groups = ({ api }) => {
 				fetchGroups={fetchGroups}
 			/>
 		</>
-	);
-};
+	)
+}
 
-export default Groups;
+export default Groups

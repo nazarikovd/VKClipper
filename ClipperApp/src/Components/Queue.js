@@ -55,6 +55,37 @@ const Queue = ({ api }) => {
         loadData();
     }, [api]);
 
+    const formatTime = (ms) => {
+        if (!ms) return 'В очереди'
+        
+        const date = new Date(ms)
+        const now = new Date()
+        
+        const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        
+        const isToday = date.toDateString() === now.toDateString()
+
+        let pre = ``
+
+        if (!isToday) {
+
+            const months = [
+                'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+                'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'
+            ]
+            
+            const day = date.getDate()
+            const month = months[date.getMonth()]
+            
+            pre = `${day} ${month} в `
+
+        }else{
+            pre = `Сегодня в `
+        }
+        
+        return pre + timeStr
+    }
+    
     const refreshQueue = async () => {
         setIsLoading(true);
         try {
@@ -201,6 +232,7 @@ const Queue = ({ api }) => {
                             <RichCell
                                 key={index}
                                 before={<Icon28DocumentOutline />}
+                                overTitle={formatTime(task.postTime)}
                                 beforeAlign="center"
                                 afterAlign="center"
                                 contentAlign='start'

@@ -44,31 +44,32 @@ module.exports = class Clipper {
 
 	async addVKGroup(groupConfig) {
 
-		const group = new ClipperVKGroup(groupConfig, () => this.accountManager.getToken());
+		const group = new ClipperVKGroup(groupConfig, () => this.accountManager.getToken())
 		let groupdata = await group.init()
+		
 		if(groupdata === false){
-			this.logManager.E(`Failed to fetch group ${groupconfig}`, "groups")
+			this.logManager.E(`Failed to fetch group ${groupConfig.group_id}`, "groups")
 			return false
 		}
 
 		const dup = this.vkGroups.find(g => g.group_id === groupdata.id)
+		if(dup) return groupdata.id
 
-		if(dup){
-			return groupdata.id
-		}
+		const schedule = groupConfig.schedule || groupConfig.intervalMinutes || "15"
 
 		this.vkGroups.push({
 			group_id: groupdata.id,
 			group: group,
 			links: [],
-			interval: groupConfig.intervalMinutes,
+			schedule: schedule,
 			wallpost: groupConfig.wallpost,
 			data: groupdata
-		});
-	
-		this.taskScheduler.addTask(groupdata.id, () => this.processGroupLinks(groupdata.id), groupConfig.intervalMinutes);
-		this.logManager.I(`Added group. [${groupdata.screen_name}] (interval: ${groupConfig.intervalMinutes}min wall: ${groupConfig.wallpost})`, "groups");
-		return groupConfig.group_id;
+		})
+		
+		this.taskScheduler.addTask(groupdata.id, () => this.processGroupLinks(groupdata.id), schedule)
+		
+		this.logManager.I(`Added group [${groupdata.screen_name}] (schedule: ${schedule} wall: ${groupConfig.wallpost})`, "groups")
+		return groupdata.id
 	}
 
 	async remVKGroup(id) {
