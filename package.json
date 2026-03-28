@@ -13,6 +13,7 @@
     "@vk-io/hear": "^1.1.1",
     "axios": "^1.7.2",
     "cors": "^2.8.5",
+    "cron-parser": "^5.5.0",
     "cron-validator": "^1.3.1",
     "express": "^4.18.2",
     "jsonfile": "^6.1.0",

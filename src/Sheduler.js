@@ -1,81 +1,107 @@
+const { CronExpressionParser } = require('cron-parser')
+
 module.exports = class ClipperTaskScheduler {
     constructor() {
-        this.tasks = [];
-        this.lastTaskId = 0;
+        this.tasks = new Map()
+        this.lastTaskId = 0
+        this.heartbeat = null
     }
 
-    addTask(group_id, taskFunc, intervalMinutes) {
+    addTask(group_id, taskFunc, schedule) {
+        this.remTask(group_id)
 
-        const existingTaskIndex = this.tasks.findIndex(t => t.group_id === group_id);
-        
-        if (existingTaskIndex !== -1) {
-            clearInterval(this.tasks[existingTaskIndex].interval);
-            this.tasks.splice(existingTaskIndex, 1);
-        }
-
+        const isCron = isNaN(schedule)
         const task = {
             id: ++this.lastTaskId,
-            lastRun: 0,
-            created: Date.now(),
-            func: taskFunc,
-            intervalMinutes,
             group_id,
-            interval: setInterval(() => {
-                task.lastRun = Date.now(); // замыкание таск досутпен из чайлда
-                taskFunc();
-            }, intervalMinutes * 60 * 1000)
-        };
+            taskFunc,
+            schedule,
+            isCron,
+            nextRun: this._calculateNext(schedule),
+            isRunning: false
+        }
 
-        this.tasks.push(task);
-        return task.id;
+        this.tasks.set(group_id, task)
+
+        if (!this.heartbeat) {
+            this.heartbeat = setInterval(() => this._tick(), 1000)
+        }
+
+        return task.id
+    }
+
+    _calculateNext(schedule, fromDate = null) {
+        const baseTime = fromDate ? new Date(fromDate).getTime() : Date.now()
+
+        if (!isNaN(schedule) && !String(schedule).includes(' ')) {
+            return baseTime + (parseFloat(schedule) * 60 * 1000)
+        }
+
+        try {
+            const cleanSchedule = String(schedule).replace(/\+/g, ' ').trim()
+            const interval = CronExpressionParser.parse(cleanSchedule, {
+                currentDate: new Date(baseTime)
+            })
+            return interval.next().getTime()
+        } catch (e) {
+            return baseTime + (15 * 60 * 1000)
+        }
+    }
+
+    async _tick() {
+        const now = Date.now()
+
+        for (const task of this.tasks.values()) {
+            if (now >= task.nextRun && !task.isRunning) {
+                const previousNextRun = new Date(task.nextRun)
+                task.isRunning = true
+                
+                try {
+                    await task.taskFunc()
+                } catch (e) {
+                    console.error(e)
+                } finally {
+                    task.isRunning = false
+                    task.nextRun = this._calculateNext(task.schedule, previousNextRun)
+                }
+            }
+        }
     }
 
     remTask(group_id) {
-        const taskIndex = this.tasks.findIndex(t => t.group_id === group_id);
-        if (taskIndex !== -1) {
-            clearInterval(this.tasks[taskIndex].interval);
-            this.tasks.splice(taskIndex, 1);
-            return true;
+        if (this.tasks.has(group_id)) {
+            this.tasks.delete(group_id)
+            if (this.tasks.size === 0 && this.heartbeat) {
+                clearInterval(this.heartbeat)
+                this.heartbeat = null
+            }
+            return true
         }
-        return false;
+        return false
     }
 
     getTimeToNextRun(group_id) {
-
-        const task = this.tasks.find(t => t.group_id === group_id);
-        if (!task) return null;
-
-        const now = Date.now();
-
-        let timeSinceLastRun 
-        if (task.lastRun === 0) {
-            timeSinceLastRun = now - task.created;  
-        }else{
-            timeSinceLastRun = now - task.lastRun; 
-        }
-  
-        const intervalMs = task.intervalMinutes * 60 * 1000;
-        const timeToNextRun = intervalMs - timeSinceLastRun;
-        return Math.max(0, timeToNextRun);
-
+        const task = this.tasks.get(group_id)
+        if (!task) return null
+        return Math.max(0, task.nextRun - Date.now())
     }
 
     getAllNextIntervals() {
-
         const intervals = []
-    
-        this.tasks.forEach(task => {
+        for (const task of this.tasks.values()) {
             intervals.push({
                 id: task.group_id,
                 int: this.getTimeToNextRun(task.group_id)
             })
-        })
-    
+        }
         return intervals
-
     }
 
     stopTasks() {
-        this.tasks.forEach(task => clearInterval(task.interval));
+        if (this.heartbeat) {
+            clearInterval(this.heartbeat)
+            this.heartbeat = null
+        }
+        this.tasks.clear()
     }
 }

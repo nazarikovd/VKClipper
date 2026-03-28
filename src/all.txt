@@ -1,0 +1,1366 @@
+kyoka@kyoka-PC:/mnt/c/Users/kyoka/Desktop/VKClipper-main/src$ cat *.js
+const express = require('express');
+const Clipper = require('./Clipper');
+const cors = require('cors');
+const path = require('path');
+
+module.exports = class ClipperAPI {
+
+    constructor(statics, port) {
+
+        this.clipper = new Clipper()
+        this.app = express()
+        this.port = port
+        this.app.use(express.urlencoded({ extended: true }))
+            this.app.use(cors())
+        this.app.use(express.static(statics))
+        this.setupRoutes()
+    }
+    setupRoutes() {
+
+        this.app.get('/method/account.checkAuth', (req, res) => {
+            try {
+
+                res.json({ response: !!this.clipper.accountManager.tokenData});
+
+            } catch (error) {
+
+                res.json({
+                    error: {
+                        error_code: 10,
+                        error_msg: 'Internal server error'
+                    }
+                })
+            }
+        })
+
+        this.app.get('/method/account.setCookie', async (req, res) => {
+            try {
+                const { cookie } = req.query
+
+                await this.clipper.accountManager.setCookie(cookie)
+                let token = await this.clipper.accountManager.getToken()
+                res.json({ response: token });
+
+            } catch (error) {
+
+                res.json({
+                    error: {
+                        error_code: 10,
+                        error_msg: 'Internal server error'
+                    }
+                })
+            }
+        })
+
+        this.app.get('/method/account.getGroups', async (req, res) => {
+            try {
+
+                const groups = await this.clipper.accountManager.getUserGroups()
+
+                res.json({ response: groups });
+
+            } catch (error) {
+
+                res.json({
+                    error: {
+                        error_code: 10,
+                        error_msg: 'Internal server error'
+                    }
+                })
+            }
+        })
+        this.app.get('/method/account.getProfileInfo', async (req, res) => {
+            try {
+                if(!this.clipper.accountManager.tokenData) {
+                    return res.json({
+                        error: {
+                            error_code: 5,
+                            error_msg: 'User authorization failed'
+                        }
+                    });
+                }
+
+                const profile = await this.clipper.accountManager.getProfileInfo();
+                res.json({ response: profile });
+            } catch (error) {
+                res.json({
+                    error: {
+                        error_code: 10,
+                        error_msg: 'Internal server error'
+                    }
+                });
+            }
+        });
+        this.app.get('/method/groups.get', (req, res) => {
+            try {
+
+                const groups = this.clipper.vkGroups.map(group => ({
+                    id: group.group_id,
+                    interval: group.interval,
+                    wallpost: group.wallpost,
+                    pending_tasks: this.clipper.queueManager.getClipsForGroup(group.group_id).length,
+                    nextRun: this.clipper.taskScheduler.getTimeToNextRun(group.group_id),
+                    data: group.data
+                }))
+
+                res.json({ response: groups });
+
+            } catch (error) {
+
+                res.json({
+                    error: {
+                        error_code: 10,
+                        error_msg: 'Internal server error'
+                    }
+                })
+            }
+        })
+
+        // Метод groups.add - Добавить новую группу
+        this.app.get('/method/groups.add', async (req, res) => {
+            try {
+
+                const { group_id, title, wallpost, interval } = req.query
+
+                if (!group_id) {
+
+                    return res.json({
+                        error: {
+                            error_code: 100,
+                            error_msg: 'One of the parameters specified was missing or invalid: group_id required'
+                        }
+                    })
+                }
+
+                const groupId = await this.clipper.addVKGroup({
+                    group_id,
+                    title,
+                    wallpost,
+                    intervalMinutes: interval ? parseInt(interval) : 15
+                })
+
+                if(groupId === false){
+
+                    res.json({
+                        error: {
+                            error_code: 14,
+                            error_msg: "Group is wrong"
+                        }
+                    })
+
+                    return;
+                }
+
+                res.json({ response: { group_id: groupId } })
+
+            } catch (error) {
+                console.log(error)
+                res.json({
+                    error: {
+                        error_code: 10,
+                        error_msg: error.message
+                    }
+                })
+            }
+        })
+
+        // Метод groups.delete - Удалить группу
+        this.app.get('/method/groups.delete', async (req, res) => {
+            try {
+
+                const { group_id } = req.query
+
+                if (!group_id) {
+
+                    return res.json({
+                        error: {
+                            error_code: 100,
+                            error_msg: 'Parameter group_id is required'
+                        }
+                    });
+                }
+
+                await this.clipper.remVKGroup(group_id)
+
+                res.json({ response: 1 })
+
+            } catch (error) {
+
+                res.json({
+                    error: {
+                        error_code: 10,
+                        error_msg: error.message
+                    }
+                })
+            }
+        })
+
+        // Метод links.add - Добавить TikTok ссылку
+        this.app.get('/method/links.add', async (req, res) => {
+
+                const { link, links, group_id = 'all' } = req.query;
+
+                if (!link && !links) {
+
+                    return res.json({
+                        error: {
+                            error_code: 100,
+                            error_msg: 'One of link or links is required'
+                        }
+                    })
+                }
+
+                if(link){
+
+                    await this.clipper.addTikTokLink(link, group_id)
+                    res.json({ response: 1 })
+
+                }else if(links){
+
+                    let links_array = links.split(",");
+                    const {add, done, qid} = this.clipper.queueManager.createLinksQueue()
+
+                    res.json({ response: 1, qid: qid})
+                    add(links_array)
+                    this.clipper.addTikTokLinks(links_array, group_id, done)
+
+                }
+        })
+
+        this.app.get('/method/links.getByTag', async (req, res) => {
+
+            const { tag } = req.query;
+
+            if (!tag) {
+
+                return res.json({
+                    error: {
+                        error_code: 100,
+                        error_msg: 'One tag is required'
+                    }
+                })
+            }
+
+
+            try{
+                let linksdata = await this.clipper.tiktokDownloader.getTikToksFromTag(tag)
+                if(linksdata){
+                    res.json({ response: 1, links: linksdata})
+                }else{
+                    res.json({
+                        error: {
+                            error_code: 6,
+                            error_msg: "No links"
+                        }
+                    })
+                }
+
+            }catch(e){
+                res.json({
+                    error: {
+                        error_code: 10,
+                        error_msg: error.message
+                    }
+                })
+            }
+
+
+
+
+        })
+
+        this.app.get('/method/links.getProgress', async (req, res) => {
+            try {
+                const { queue_id } = req.query;
+                let qid = Number(queue_id)
+                res.json({
+                    progress: this.clipper.queueManager.getLinkQueueProgress(qid)
+                })
+            } catch (error) {
+
+                res.json({
+                    error: {
+                        error_code: 10,
+                        error_msg: error.message
+                    }
+                })
+            }
+        })
+
+        // Метод queue.get - Получить очередь задач
+        this.app.get('/method/queue.get', (req, res) => {
+            try {
+                const { group_id } = req.query;
+                let tasks;
+
+                if (group_id) {
+                    tasks = this.clipper.queueManager.getClipsForGroup(group_id);
+                } else {
+                    tasks = this.clipper.queueManager.queue;
+                }
+
+                res.json({
+                    response: {
+                        count: tasks.length,
+                        finished: this.clipper.queueManager.finished,
+                        items: tasks
+                    }
+                })
+            } catch (error) {
+
+                res.json({
+                    error: {
+                        error_code: 10,
+                        error_msg: error.message
+                    }
+                })
+            }
+        })
+
+        this.app.get('/method/queue.complete', (req, res) => {
+            try {
+                const { file, group_id } = req.query;
+                this.clipper.queueManager.completeTask(file, Number(group_id))
+
+                res.json({
+                    response: {
+                        success: true
+                    }
+                })
+            } catch (error) {
+
+                res.json({
+                    error: {
+                        error_code: 10,
+                        error_msg: error.message
+                    }
+                })
+            }
+        })
+
+        this.app.get('/method/queue.save', async (req, res) => {
+            try {
+
+                let sv = await this.clipper.saveQ()
+
+                res.json({
+                    response: {
+                        success: sv
+                    }
+                })
+            } catch (error) {
+
+                res.json({
+                    error: {
+                        error_code: 10,
+                        error_msg: error.message
+                    }
+                })
+            }
+        })
+
+        this.app.get('/method/queue.restore', async (req, res) => {
+            try {
+
+                let sv = await this.clipper.restoreQ()
+
+                res.json({
+                    response: {
+                        success: sv
+                    }
+                })
+
+            } catch (error) {
+
+                res.json({
+                    error: {
+                        error_code: 10,
+                        error_msg: error.message
+                    }
+                })
+            }
+        })
+
+        this.app.get('/method/tasks.get', (req, res) => {
+            try {
+                let tasks = this.clipper.taskScheduler.tasks.map(task => ({
+                    id: task.id,
+                    lastRun: task.lastRun,
+                    intervalMinutes: task.intervalMinutes,
+                    group_id: task.group_id,
+                    cronActive: task.cronTask ? task.cronTask.running : false
+                }));
+
+                res.json({
+                    response: {
+                        count: tasks.length,
+                        items: tasks
+                    }
+                });
+            } catch (e) {
+                res.status(500).json({ error: e.message });
+            }
+        })
+
+        this.app.get('/method/tasks.getNextById', (req, res) => {
+            const { group_id } = req.query;
+            try {
+                let next = this.clipper.taskScheduler.getTimeToNextRun(Number(group_id))
+
+                res.json({
+                    response: {
+                        response: next
+                    }
+                });
+            } catch (e) {
+                res.status(500).json({ error: e.message });
+            }
+        })
+
+        this.app.get('/method/tasks.getAllNext', (req, res) => {
+            try {
+                let tasks = this.clipper.taskScheduler.getAllNextIntervals()
+
+                res.json({
+                    response: {
+                        response: tasks
+                    }
+                });
+            } catch (e) {
+                res.status(500).json({ error: e.message });
+            }
+        })
+
+        this.app.get('/method/logs.get', (req, res) => {
+            try {
+                const { type, from } = req.query;
+                if(type){
+                    return res.json({
+                        response: {
+                            "logs": this.clipper.logManager.getByType(type)
+                        }
+                    });
+                }
+                if(from){
+                    return res.json({
+                        response: {
+                            "logs": this.clipper.logManager.getByFrom(from)
+                        }
+                    });
+                }
+                return res.json({
+                    response: {
+                        "logs": this.clipper.logManager.getAll()
+                    }
+                });
+            }catch(e){
+                res.status(500).json({ error: e.message });
+            }
+        })
+
+        this.app.get('/method/files.showVideo', async (req, res) => {
+            const ALLOWED_FILENAME_REGEX = /^[a-zA-Z0-9\-_]+\.mp4$/;
+
+            try {
+                const { file } = req.query
+
+                if (!ALLOWED_FILENAME_REGEX.test(file)) {
+                    return res.json({
+                        error: {
+                            error_code: 3,
+                            error_msg: 'I Have no video like that sussss stafff'
+                        }
+                    })
+                }
+
+                let video = await this.clipper.fileManager.readClip(file)
+                if(!video){
+                    return res.json({
+                        error: {
+                            error_code: 2,
+                            error_msg: 'I Have no video like that'
+                        }
+                    })
+                }
+                res.set({
+                    'Content-Type': 'video/mp4',
+                    'Content-Length': video.length
+                });
+
+                res.send(video);
+
+            } catch (error) {
+
+                res.json({
+                    error: {
+                        error_code: 10,
+                        error_msg: 'Internal server error'
+                    }
+                })
+            }
+        })
+
+        this.app.listen(this.port, () => {
+            console.log(`Clipper API running on port ${this.port}`)
+        })
+    }
+}
+const axios = require('axios');
+
+module.exports = class ClipperAccount {
+    constructor(log) {
+        this.logManager = log
+        this.tokenData = null;
+        this.tokenExpires = 0;
+        this.appId = 6287487;
+        this.cookie = null;
+        this._inPromise = null;
+    }
+
+    async setCookie(cookie){
+        this.cookie = cookie;
+    }
+
+    async getToken() {
+
+        if (this.tokenData && Date.now() < this.tokenExpires - 60000) {
+            return this.tokenData.access_token;
+        }
+
+        //race был, поэтому кешируем промис
+        if (this._inPromise) {
+            return this._inPromise;
+        }
+
+        this._inPromise = this._refreshToken()
+        .finally(() => {
+            this._inPromise = null;
+        });
+
+        return this._inPromise;
+
+    }
+
+    async _refreshToken() {
+        try {
+            const response = await axios.post('https://login.vk.com/?act=web_token', {
+                version: 1,
+                app_id: this.appId
+            }, {
+                headers: {
+                    'Cookie': this.cookie,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Origin': 'https://vk.com',
+                    'Referer': 'https://vk.com/',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                }
+            });
+
+            if (response.data?.type === 'okay') {
+                this.tokenData = response.data.data;
+                this.tokenExpires = response.data.data.expires * 1000;
+                this.logManager.I(`Refresh access_token. Expires at ${new Date(this.tokenExpires).toLocaleString()}`, "account");
+                return this.tokenData.access_token;
+            } else {
+                this.logManager.E(`Auth error: ${JSON.stringify(response.data)}`, "account");
+            }
+        } catch (error) {
+            this.logManager.E(`Refresh access_token error: ${error.message}`, "account");
+            throw error;
+        }
+    }
+
+    isValid() {
+        return this.tokenData && Date.now() < this.tokenExpires;
+    }
+
+    async getUserGroups(){
+        const token = await this.getToken()
+        const q = new URLSearchParams({
+            extended: 1,
+            filter: "admin",
+            access_token: token,
+            v: "5.120"
+        });
+        const response = await axios.get(`https://api.vk.com/method/groups.get?${q}`)
+        try {
+            if(!response.data.response.items || response.data.response.count === 0){
+                return []
+            }
+            return response.data.response.items
+        } catch(e) {
+            return []
+        }
+    }
+
+    async getProfileInfo(){
+        const token = await this.getToken()
+        const q = new URLSearchParams({
+            fields: "photo_200, domain",
+            access_token: token,
+            v: "5.120"
+        });
+        const response = await axios.get(`https://api.vk.com/method/users.get?${q}`)
+
+        if(!response.data.response[0] || response.data.response.count === 0){
+            throw new Error()
+        }
+        return response.data.response[0]
+
+    }
+}const ClipperFileManager = require("./Files");
+const ClipperQueueManager = require("./Queue");
+const ClipperVKGroup = require("./Group");
+const ClipperTikTok = require("./TikTok");
+const ClipperTaskScheduler = require("./Sheduler");
+const ClipperAccount = require("./Account");
+const ClipperLogManager = require("./Log");
+
+module.exports = class Clipper {
+
+        constructor(config = {}) {
+                this.logManager = new ClipperLogManager()
+                this.tempDir = './ClipperTemp/'
+                this.fileManager = new ClipperFileManager()
+                this.fileManager.init(this.tempDir)
+                this.taskScheduler = new ClipperTaskScheduler()
+                this.tiktokDownloader = new ClipperTikTok()
+                this.queueManager = new ClipperQueueManager(() => this.getCurrentGroups())
+                this.accountManager = new ClipperAccount(this.logManager)
+                this.vkGroups = []
+                this.initAutoSave()
+
+        }
+
+        initAutoSave(){
+                process.on('SIGINT', async () => {
+                        console.log('Saving queue before exit...');
+                        await this.saveQ();
+                        process.exit();
+                });
+
+                process.on('SIGTERM', async () => {
+                        console.log('Saving queue before exit...');
+                        await this.saveQ();
+                        process.exit();
+                });
+        }
+
+        getCurrentGroups() {
+                return this.vkGroups.map(group => ({
+                        group_id: group.group_id
+                }));
+        }
+
+        async addVKGroup(groupConfig) {
+
+                const group = new ClipperVKGroup(groupConfig, () => this.accountManager.getToken());
+                let groupdata = await group.init()
+                if(groupdata === false){
+                        this.logManager.E(`Failed to fetch group ${groupconfig}`, "groups")
+                        return false
+                }
+
+                const dup = this.vkGroups.find(g => g.group_id === groupdata.id)
+
+                if(dup){
+                        return groupdata.id
+                }
+
+                this.vkGroups.push({
+                        group_id: groupdata.id,
+                        group: group,
+                        links: [],
+                        interval: groupConfig.intervalMinutes,
+                        wallpost: groupConfig.wallpost,
+                        data: groupdata
+                });
+
+                this.taskScheduler.addTask(groupdata.id, () => this.processGroupLinks(groupdata.id), groupConfig.intervalMinutes);
+                this.logManager.I(`Added group. [${groupdata.screen_name}] (interval: ${groupConfig.intervalMinutes}min wall: ${groupConfig.wallpost})`, "groups");
+                return groupConfig.group_id;
+        }
+
+        async remVKGroup(id) {
+
+                let gid = Number(id)
+                const del = this.vkGroups.find(g => g.group_id === gid)
+
+                if (!del) {
+                        return false;
+                }
+                this.taskScheduler.remTask(gid);
+                const groupClips = this.queueManager.getClipsForGroup(gid);
+
+                await Promise.all(
+
+                        groupClips.map(async (clip) => {
+
+                                this.queueManager.completeTask(clip.file, gid)
+
+                                if (!this.queueManager.stillNeed(clip.file)) {
+                                        await this.fileManager.remClip(clip.file)
+                                }
+
+                        })
+
+                )
+                this.vkGroups = this.vkGroups.filter(g => g.group_id !== gid)
+                this.logManager.I(`Removed group. [${del.data.screen_name}]`, "groups");
+                return true;
+
+        }
+
+        async addTikTokLink(link, groupId = 'all', fromBatch=false) {
+
+                const videoBuffer = await this.tiktokDownloader.getVideo(link)
+                const clipname = await this.fileManager.saveClip(videoBuffer)
+
+                this.queueManager.addClip({
+                        type: groupId === 'all' ? 'all' : 'group',
+                        id: groupId,
+                        file: clipname
+                });
+
+                if(!fromBatch){
+                        this.logManager.I(`${link} => ${groupId === 'all' ? 'ALL' : 'club' + groupId} (${clipname})`, "video")
+                }
+
+
+        }
+
+        async addTikTokLinks(links, groupId = 'all', doner) {
+                for(let onelink of links){
+                        try{
+                                await this.addTikTokLink(onelink, groupId, true)
+                                this.logManager.I(`${onelink} => ${groupId === 'all' ? 'ALL' : 'club' + groupId} (batch)`, "video")
+                        }catch(e){
+                                this.logManager.E(`${onelink} => ${groupId === 'all' ? 'ALL' : 'club' + groupId} failed. Wait 1 sec...`, "video")
+                                await new Promise(resolve => setTimeout(resolve, 1000));
+                        }finally{
+                                doner(onelink)
+                        }
+                }
+
+        }
+
+        async processGroupLinks(groupId) {
+                const groupData = this.vkGroups.find(g => g.group_id === groupId)
+                if (!groupData) return
+
+                const tasks = this.queueManager.getClipsForGroup(groupId)
+                if (tasks.length === 0) return;
+
+                const task = tasks[0]
+
+                try{
+
+                        const clip = await this.fileManager.readClip(task.file)
+                        let abc = await groupData.group.uploadClip(clip)
+                        this.queueManager.completeTask(task.file, groupId)
+
+                        this.logManager.I(`${task.file} => ${groupId}`, "task")
+
+                        if (!this.queueManager.stillNeed(task.file)) {
+                                this.logManager.I(`${task.file} removed (not needed anymore)`, "files")
+                                await this.fileManager.remClip(task.file)
+                        }
+
+                }catch(e){
+                        this.logManager.E(`${groupId} task failed. ${e}`, "task")
+                }
+
+        }
+
+        async saveQ(){
+
+                const queueData = {
+            queue: this.queueManager.queue
+                }
+
+                let sv = await this.fileManager.saveQueueData(queueData)
+                return sv
+        }
+
+        async restoreQ(){
+
+                const sv = await this.fileManager.getQueueData()
+                if (!sv) return false
+
+                const validQueue = []
+        for (const task of sv.queue) {
+            try {
+                await this.fileManager.readClip(task.file)
+                validQueue.push(task)
+            } catch {
+                this.logManager.E(`File ${task.file} not found, skipping...`, "queue")
+            }
+        }
+                this.queueManager.queue = validQueue
+                this.logManager.I(`Queue state restored. ${validQueue.length} new tasks`, "queue")
+                return true
+        }
+
+
+}
+
+let fs = require('fs')
+let path = require('path');
+let crypto = require('crypto')
+let os = require('os')
+
+module.exports = class ClipperFileManager {
+
+    constructor() {
+        this.clipsFolder = null
+    }
+
+    async init(clipsFolder) {
+        this.clipsFolder = clipsFolder
+        await this._createDirectoryIfNotExists(this.clipsFolder)
+    }
+
+
+    async saveClip(data) {
+        const name = this._generateFileName()
+        const filePath = path.join(this.clipsFolder, name)
+        return new Promise((resolve, reject) => {
+            fs.writeFile(filePath, data, (err) => {
+              if (err) reject(err)
+              else resolve(name)
+            })
+        })
+    }
+
+    async readClip(name) {
+        const filePath = path.join(this.clipsFolder, name)
+        return new Promise((resolve, reject) => {
+            fs.readFile(filePath, (err, data) => {
+              if (err) reject(err)
+              else resolve(data)
+            })
+        })
+    }
+
+    async remClip(name) {
+        const filePath = path.join(this.clipsFolder, name)
+        return new Promise((resolve, reject) => {
+            fs.unlink(filePath, (err, data) => {
+              if (err) reject(err)
+              else resolve()
+            })
+        })
+    }
+
+    async _createDirectoryIfNotExists(dirPath) {
+        try {
+            fs.accessSync(dirPath)
+        } catch (err) {
+            fs.mkdirSync(dirPath, { recursive: true })
+        }
+    }
+
+    async saveQueueData(data, name = 'queue_backup.json') {
+
+        const filePath = path.join(this.clipsFolder, name)
+        return new Promise((resolve, reject) => {
+            fs.writeFile(filePath, JSON.stringify(data, null, 2), (err) => {
+                if (err) reject(err)
+                else resolve(name)
+            })
+        })
+
+    }
+
+    async getQueueData(name = 'queue_backup.json') {
+
+        const filePath = path.join(this.clipsFolder, name)
+        return new Promise((resolve, reject) => {
+            fs.readFile(filePath, (err, data) => {
+
+                if (err){
+                    resolve(false); console.log(err)
+                }
+                else{
+                    const parsed = JSON.parse(data)
+                    resolve(parsed)
+                }
+            })
+        })
+
+    }
+
+    _generateFileName(extension = '.mp4') {
+        return crypto.randomBytes(10).toString('hex') + extension;
+    }
+}const axios = require("axios");
+
+module.exports = class ClipperGroup {
+    constructor(params, tokengetter) {
+        this.groupId = Number(params.group_id)
+        this.defaultTitle = params.title
+        this.apiVersion = "5.120"
+        this.getToken = tokengetter
+        this.wallpost = params.wallpost
+    }
+
+    async init(){
+        const token = await this.getToken()
+        const q = new URLSearchParams({
+            group_id: this.groupId,
+            access_token: token,
+            v: this.apiVersion
+        });
+
+        const response = await axios.get(`https://api.vk.com/method/groups.getById?${q}`)
+        try {
+            if(!response.data.response[0].is_admin){
+                return false
+            }
+            this.groupId = response.data.response[0].id
+            return response.data.response[0]
+        } catch(e) {
+            return false
+        }
+    }
+
+    async uploadClip(video) {
+        const uploadUrl = await this._getUploadUrl({
+            file_size: video.length
+        });
+        const res = await this._upload(uploadUrl, video)
+        await this._waitForUpload(res.video_id, res.video_hash)
+        await this._edit(res.video_id)
+        return await this._publish(res.video_id)
+    }
+
+    async _isVKCOM() {
+        const token = await this.getToken()
+        const q = new URLSearchParams({
+            access_token: token,
+            v: "5.200"
+        });
+        const response = await axios.get(`https://api.vk.com/method/apps.get?${q}`)
+        return response.data?.response?.items?.[0]?.id === 6287487
+    }
+
+    async _getUploadUrl(params) {
+        const token = await this.getToken()
+        const q = new URLSearchParams({
+            group_id: this.groupId,
+            access_token: token,
+            v: this.apiVersion,
+            ...params
+        });
+
+        const response = await axios.get(`https://api.vk.com/method/shortVideo.create?${q}`)
+        return response.data.response.upload_url
+    }
+
+    async _upload(uploadUrl, videoData) {
+        const headers = {
+            'Connection': 'keep-alive',
+            'Content-Disposition': 'attachment; fileName="video.mp4"',
+            'Content-Length': videoData.length,
+            'Content-Range': `bytes 0-${videoData.length - 1}/${videoData.length}`,
+            'Content-Type': 'application/x-binary; charset=x-user-defined',
+            'X-Uploading-Mode': 'parallel'
+        };
+
+        const response = await axios.post(uploadUrl, videoData, { headers })
+        return response.data
+    }
+
+    async _publish(id) {
+        const token = await this.getToken()
+        const q = new URLSearchParams({
+            video_id: id,
+            owner_id: "-"+this.groupId,
+            title: this.defaultTitle,
+            license_agree: 1,
+            ref: "club_clips_button",
+            wallpost: this.wallpost,
+            can_make_duet: 1,
+            group_id: this.groupId,
+            access_token: token,
+            v: this.apiVersion
+        })
+
+        const response = await axios.get(`https://api.vk.com/method/shortVideo.publish?${q}`)
+        return response.data
+    }
+
+    async _waitForUpload(id, hash) {
+        return new Promise((resolve) => {
+            const int = setInterval(async () => {
+                const data = await this._getProgress(id, hash)
+                if(data.response.percents === 100) {
+                    clearInterval(int)
+                    resolve()
+                }
+            }, 2000)
+        })
+    }
+
+    async _getProgress(id, hash) {
+        const token = await this.getToken()
+        const q = new URLSearchParams({
+            video_id: id,
+            owner_id: "-"+this.groupId,
+            hash: hash,
+            access_token: token,
+            v: this.apiVersion
+        })
+
+        const response = await axios.get(`https://api.vk.com/method/shortVideo.encodeProgress?${q}`)
+        return response.data
+    }
+
+    async _edit(id) {
+        const token = await this.getToken()
+        const q = new URLSearchParams({
+            video_id: id,
+            owner_id: "-"+this.groupId,
+            description: this.defaultTitle,
+            access_token: token,
+            privacy_view: "all",
+            privacy_comment: "all",
+            v: this.apiVersion
+        })
+
+        const response = await axios.get(`https://api.vk.com/method/shortVideo.edit?${q}`)
+        return response.data
+    }
+}module.exports = class ClipperLogManager {
+    constructor(maxLogs = 1000) {
+        this.logstore = [];
+        this.maxLogs = maxLogs;
+    }
+
+    E(message, from="main") {
+        this.log('error', message, from);
+    }
+
+    S(message, from="main") {
+        this.log('status', message, from);
+    }
+
+    W(message, from="main") {
+        this.log('warn', message, from);
+    }
+
+    I(message, from="main") {
+        this.log('info', message, from);
+    }
+
+    log(type, message, from) {
+        const logEntry = {
+            type,
+            message,
+            timestamp: new Date().toISOString(),
+            from: from
+        };
+
+        this.logstore = [logEntry, ...this.logstore]
+
+        if (this.logstore.length > this.maxLogs) {
+            this.logstore.shift();
+        }
+    }
+
+    getW() {
+        return this.logstore.filter(entry => entry.type === 'warn');
+    }
+
+    getE() {
+        return this.logstore.filter(entry => entry.type === 'error');
+    }
+
+    getI() {
+        return this.logstore.filter(entry => entry.type === 'info');
+    }
+
+    getS() {
+        return this.logstore.filter(entry => entry.type === 'status');
+    }
+
+    getAll() {
+        return [...this.logstore];
+    }
+
+    clear() {
+        this.logstore = [];
+    }
+
+    getLast(n = 1) {
+        return this.logstore.slice(-n);
+    }
+
+
+    getByType(type) {
+        return this.logstore.filter(entry => entry.type === type);
+    }
+
+    getByTypes(types) {
+        return this.logstore.filter(entry => types.includes(entry.type));
+    }
+
+    getByFrom(from) {
+        return this.logstore.filter(entry => entry.from === from);
+    }
+
+    getByFroms(froms) {
+        return this.logstore.filter(entry => froms.includes(entry.from));
+    }
+};module.exports = class ClipperQueueManager {
+    constructor(getGroupsFn) {
+        this.queue = []
+        this.getCurrentGroups = getGroupsFn
+        this.uploaded = new Set()
+        this.linksAddQueue = []
+        this.finished = 0
+    }
+
+    addClip(clipData) {
+
+        if (clipData.type === 'all') {
+
+            const currentGroups = this.getCurrentGroups()
+
+            currentGroups.forEach(group => {
+                this.queue.push({
+                    file: clipData.file,
+                    groupId: Number(group.group_id),
+                    isAll: true
+                })
+            })
+
+        } else {
+
+            this.queue.push({
+                file: clipData.file,
+                groupId: Number(clipData.id),
+                isAll: false
+            })
+
+        }
+
+    }
+
+    createLinksQueue() {
+        let new_id = Math.floor(Math.random() * (4e10 - 1e10) + 1e10);
+
+        this.linksAddQueue.push({
+            id: new_id,
+            progress: 0,
+            done: [],
+            in_progress: [],
+            is_done: false
+        });
+
+        return {
+            add: (link) => this.addLinksToQueue(new_id, link),
+            done: (link) => this.completeLink(new_id, link),
+            qid: new_id
+        };
+    }
+
+    addLinksToQueue(queueid, links) {
+        let queue = this.linksAddQueue.find(q => q.id === queueid);
+        let uniqueLinks = [...new Set(links)];
+        uniqueLinks.forEach(link => queue.in_progress.push(link));
+        return queue.in_progress.length;
+    }
+
+    completeLink(queueid, link) {
+        const queue = this.linksAddQueue.find(q => q.id === queueid);
+        if (!queue) return null;
+        queue.in_progress = queue.in_progress.filter(l => l !== link);
+        queue.done.push(link);
+
+        const total = queue.done.length + queue.in_progress.length;
+        queue.progress = total > 0 ? (queue.done.length / total) * 100 : 0;
+
+        queue.is_done = queue.in_progress.length === 0;
+
+        return queue;
+    }
+
+    getLinkQueueProgress(queueid) {
+        const queue = this.linksAddQueue.find(q => q.id === queueid);
+        return queue ? Math.floor(queue.progress) : 0;
+    }
+
+    getClipsForGroup(groupId) {
+        return this.queue.filter(task => task.groupId === groupId)
+    }
+
+    completeTask(file, groupId) {
+        this.finished++
+        this.queue = this.queue.filter(task => !(task.file === file && task.groupId === groupId))
+    }
+
+    stillNeed(file){
+        const need = this.queue.some(task => task.file === file)
+        return need
+    }
+
+    getPendingTasks() {
+        return this.queue.length
+    }
+}module.exports = class ClipperTaskScheduler {
+    constructor() {
+        this.tasks = [];
+        this.lastTaskId = 0;
+    }
+
+    addTask(group_id, taskFunc, intervalMinutes) {
+
+        const existingTaskIndex = this.tasks.findIndex(t => t.group_id === group_id);
+
+        if (existingTaskIndex !== -1) {
+            clearInterval(this.tasks[existingTaskIndex].interval);
+            this.tasks.splice(existingTaskIndex, 1);
+        }
+
+        const task = {
+            id: ++this.lastTaskId,
+            lastRun: 0,
+            created: Date.now(),
+            func: taskFunc,
+            intervalMinutes,
+            group_id,
+            interval: setInterval(() => {
+                task.lastRun = Date.now(); // замыкание таск досутпен из чайлда
+                taskFunc();
+            }, intervalMinutes * 60 * 1000)
+        };
+
+        this.tasks.push(task);
+        return task.id;
+    }
+
+    remTask(group_id) {
+        const taskIndex = this.tasks.findIndex(t => t.group_id === group_id);
+        if (taskIndex !== -1) {
+            clearInterval(this.tasks[taskIndex].interval);
+            this.tasks.splice(taskIndex, 1);
+            return true;
+        }
+        return false;
+    }
+
+    getTimeToNextRun(group_id) {
+
+        const task = this.tasks.find(t => t.group_id === group_id);
+        if (!task) return null;
+
+        const now = Date.now();
+
+        let timeSinceLastRun
+        if (task.lastRun === 0) {
+            timeSinceLastRun = now - task.created;
+        }else{
+            timeSinceLastRun = now - task.lastRun;
+        }
+
+        const intervalMs = task.intervalMinutes * 60 * 1000;
+        const timeToNextRun = intervalMs - timeSinceLastRun;
+        return Math.max(0, timeToNextRun);
+
+    }
+
+    getAllNextIntervals() {
+
+        const intervals = []
+
+        this.tasks.forEach(task => {
+            intervals.push({
+                id: task.group_id,
+                int: this.getTimeToNextRun(task.group_id)
+            })
+        })
+
+        return intervals
+
+    }
+
+    stopTasks() {
+        this.tasks.forEach(task => clearInterval(task.interval));
+    }
+}const { tiktokdl:dl } = require('tiktokdl')
+const axios = require("axios")
+
+module.exports = class ClipperTikTok{
+
+    constructor(){
+
+    }
+
+    async getVideo(url){
+        let mp4url = await this._getVideoUrl(url)
+        let video = await axios.get(mp4url, {responseType: 'arraybuffer'})
+        return video.data
+    }
+
+    async _getVideoUrl(url){
+        let data = await dl(url)
+        return data.video
+    }
+
+    async getTikToksFromTag(tag){
+
+        let res = await axios.get("https://www.tiktok.com/api/seo/kap/video_list/", {
+            params: {
+                'WebIdLastTime': '0',
+                'aid': '1988',
+                'appId': '1233',
+                'app_language': 'en',
+                'app_name': 'tiktok_web',
+                'browser_language': 'en-US',
+                'browser_name': 'Mozilla',
+                'browser_online': 'true',
+                'browser_platform': 'Win32',
+                'browser_version': '5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                'cacheSessionId': '1734657732550',
+                'channel': 'tiktok_web',
+                'cookie_enabled': 'true',
+                'count': '150',
+                'data_collection_enabled': 'true',
+                'device_id': '7389950662370674208',
+                'device_platform': 'web_pc',
+                'focus_state': 'true',
+                'from_page': '',
+                'history_len': '7',
+                'is_fullscreen': 'false',
+                'is_page_visible': 'true',
+                'keyword': tag,
+                'odinId': '7096488108610634757',
+                'offset': '0',
+                'os': 'windows',
+                'pageType': '11',
+                'priority_region': "RU",
+                'region': "RU",
+                'root_referer': 'https://www.google.com/',
+                'screen_height': '768',
+                'screen_width': '1360',
+                'trafficType': '0',
+                'tz_name': "Europe/Moscow",
+                'user_is_login': 'true',
+                'webcast_language': 'en',
+            }
+        })
+
+        let l = []
+        try{
+            res.data.videoList.forEach(a => l.push(`https://tiktok.com/share/video/${a.id}`))
+            return l
+        }catch(e){
+            return false
+        }
+
+
+
+    }
+}
