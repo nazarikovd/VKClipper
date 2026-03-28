@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react"
 import {
   ModalPage,
   FormItem,
@@ -11,81 +11,92 @@ import {
   Select,
   Radio,
   CustomSelectOption,
-  Avatar
-} from "@vkontakte/vkui";
+  Avatar,
+  SegmentedControl
+} from "@vkontakte/vkui"
 
 const GroupModal = ({ activeModal, setActiveModal, api, error, setError, fetchGroups }) => {
+
   const [newGroup, setNewGroup] = useState({
     group_id: "",
     title: "",
-    wallpost: 0, // 0 - не постить, 1 - постить
-    interval: "15",
+    wallpost: 0,
+    schedule: "15",
     data: {},
-  });
+  })
 
-  const [userGroups, setUserGroups] = useState([]);
-  const [loadingGroups, setLoadingGroups] = useState(false);
-  const [inputMethod, setInputMethod] = useState("id");
+  const [mode, setMode] = useState("interval")
+  const [userGroups, setUserGroups] = useState([])
+  const [loadingGroups, setLoadingGroups] = useState(false)
 
-  const handleInputMethodChange = (method) => {
-    setInputMethod(method);
-    if (method === "select" && userGroups.length === 0) {
-      handleGetUserGroups();
-    }
-  };
+  const [params, setParams] = useState({
+    interval: "15",
+    hourlyMinute: "02",
+    dailyTime: "12:00",
+    customCron: "* * * * *"
+  })
 
   const handleGetUserGroups = async () => {
-    setLoadingGroups(true);
-    setError(null);
-    
+    setLoadingGroups(true)
+    setError(null)
     try {
-      const response = await api.call("account.getGroups");
+      const response = await api.call("account.getGroups")
       setUserGroups((response.response || []).map(group => ({
         value: group.id.toString(),
         label: group.name || `Группа ${group.id}`,
         avatar: group.photo_50 || group.photo_100 || undefined
-      })));
+      })))
     } catch (err) {
-      console.error("Ошибка загрузки групп:", err);
-      setError(err.error_msg || "Не удалось загрузить список групп");
+      setError(err.error_msg || "Не удалось загрузить список групп")
     } finally {
-      setLoadingGroups(false);
+      setLoadingGroups(false)
     }
-  };
+  }
 
-  const handleGroupSelect = (e) => {
-    const selectedGroup = userGroups.find(g => g.value === e.target.value) || {};
-    setNewGroup(prev => ({
-      ...prev,
-      group_id: selectedGroup.value || "",
-      title: selectedGroup.label || "",
-    }));
-  };
+  useEffect(() => {
+    let finalSchedule = ""
+    if (mode === "interval") {
+      finalSchedule = params.interval
+    } else if (mode === "hourly") {
+      const min = parseInt(params.hourlyMinute) || 0
+      finalSchedule = `${min} * * * *`
+    } else if (mode === "daily") {
+      const [hours, minutes] = params.dailyTime.split(':')
+      finalSchedule = `${parseInt(minutes)} ${parseInt(hours)} * * *`
+    } else {
+      finalSchedule = params.customCron
+    }
+    setNewGroup(prev => ({ ...prev, schedule: finalSchedule }))
+  }, [mode, params])
 
   const handleAddGroup = async () => {
     if (!newGroup.group_id) {
-      setError("Укажите ID группы");
-      return;
+      setError("Укажите ID группы")
+      return
     }
 
-    setError(null);
+    setError(null)
     try {
-      await api.call("groups.add", newGroup);
-      await fetchGroups();
-      setActiveModal(null);
+      await api.call("groups.add", newGroup)
+      await fetchGroups()
+      setActiveModal(null)
       setNewGroup({
         group_id: "",
         title: "",
         wallpost: 0,
-        interval: "15",
+        schedule: "15",
         data: {},
-      });
+      })
+      setMode("interval")
     } catch (err) {
-      console.error("Ошибка добавления группы:", err);
-      setError(err.error_msg || "Не удалось добавить группу");
+      setError(err.error_msg || "Не удалось добавить группу")
     }
-  };
+  }
 
+  useEffect(() => {
+    handleGetUserGroups()
+  }, [])
+  
   return (
     <ModalRoot activeModal={activeModal}>
       <ModalPage
@@ -101,57 +112,30 @@ const GroupModal = ({ activeModal, setActiveModal, api, error, setError, fetchGr
             </FormItem>
           )}
 
-          <FormItem>
-            <Radio
-              name="inputMethod"
-              value="id"
-              checked={inputMethod === "id"}
-              onChange={() => handleInputMethodChange("id")}
-            >
-              Ввести ID группы
-            </Radio>
-            <Radio
-              name="inputMethod"
-              value="select"
-              checked={inputMethod === "select"}
-              onChange={() => handleInputMethodChange("select")}
-            >
-              Выбрать из моих групп
-            </Radio>
+          <FormItem top="Мои группы">
+            <Select
+              id="groups-select"
+              placeholder={loadingGroups ? "Загрузка..." : "Выберите группу"}
+              value={newGroup.group_id}
+              onChange={(e) => {
+                const selected = userGroups.find(g => g.value === e.target.value) || {}
+                setNewGroup(prev => ({ 
+                  ...prev, 
+                  group_id: selected.value, 
+                  title: selected.label 
+                }))
+              }}
+              disabled={loadingGroups}
+              options={userGroups}
+              renderOption={({ option, ...restProps }) => (
+                <CustomSelectOption
+                  key={option.value}
+                  {...restProps}
+                  before={option.avatar && <Avatar size={24} src={option.avatar} />}
+                />
+              )}
+            />
           </FormItem>
-
-          {inputMethod === "id" ? (
-            <FormItem top="ID группы или screen_name">
-              <Input
-                type="text"
-                value={newGroup.group_id}
-                onChange={(e) => setNewGroup(prev => ({ ...prev, group_id: e.target.value }))}
-                placeholder="123456789 или team"
-              />
-            </FormItem>
-          ) : (
-            <FormItem
-              top="Мои группы"
-              htmlFor="groups-select"
-              bottom={loadingGroups ? "Загрузка..." : "Выберите группу из списка"}
-            >
-              <Select
-                id="groups-select"
-                placeholder={loadingGroups ? "Загрузка..." : "Выберите группу"}
-                value={newGroup.group_id}
-                onChange={handleGroupSelect}
-                disabled={loadingGroups}
-                options={userGroups}
-                renderOption={({ option, ...restProps }) => (
-                  <CustomSelectOption
-                    key={option.value}
-                    {...restProps}
-                    before={option.avatar && <Avatar size={24} src={option.avatar} />}
-                  />
-                )}
-              />
-            </FormItem>
-          )}
 
           <FormItem top="Описание клипов">
             <Input
@@ -162,20 +146,66 @@ const GroupModal = ({ activeModal, setActiveModal, api, error, setError, fetchGr
             />
           </FormItem>
 
-          <FormItem top="Интервал (мин)">
-            <Input
-              type="number"
-              value={newGroup.interval}
-              onChange={(e) => setNewGroup(prev => ({ ...prev, interval: e.target.value }))}
-              min="1"
-              max="1440"
+          <FormItem top="Режим очереди">
+            <SegmentedControl
+              value={mode}
+              onChange={(v) => setMode(v)}
+              options={[
+                { label: 'Интервал', value: 'interval' },
+                { label: 'Раз в час', value: 'hourly' },
+                { label: 'Ежедневно', value: 'daily' },
+                { label: 'Сам решу', value: 'custom' },
+              ]}
             />
           </FormItem>
+
+          {mode === 'interval' && (
+            <FormItem top="Интервал (мин)">
+              <Input
+                type="number"
+                value={params.interval}
+                onChange={(e) => setParams(p => ({ ...p, interval: e.target.value }))}
+                placeholder="15"
+              />
+            </FormItem>
+          )}
+
+          {mode === 'hourly' && (
+            <FormItem top="В какую минуту каждого часа?" bottom={`Выражение: ${newGroup.schedule}`}>
+              <Input
+                type="number"
+                min="0"
+                max="59"
+                value={params.hourlyMinute}
+                onChange={(e) => setParams(p => ({ ...p, hourlyMinute: e.target.value }))}
+                placeholder="02"
+              />
+            </FormItem>
+          )}
+
+          {mode === 'daily' && (
+            <FormItem top="В какое время каждый день?" bottom={`Выражение: ${newGroup.schedule}`}>
+              <Input
+                type="time"
+                value={params.dailyTime}
+                onChange={(e) => setParams(p => ({ ...p, dailyTime: e.target.value }))}
+              />
+            </FormItem>
+          )}
+
+          {mode === 'custom' && (
+            <FormItem top="Cron выражение">
+              <Input
+                value={params.customCron}
+                onChange={(e) => setParams(p => ({ ...p, customCron: e.target.value }))}
+                placeholder="* * * * *"
+              />
+            </FormItem>
+          )}
 
           <FormItem top="Постить на стене?">
             <Radio
               name="wallpost"
-              value="1"
               checked={newGroup.wallpost === 1}
               onChange={() => setNewGroup(prev => ({ ...prev, wallpost: 1 }))}
             >
@@ -183,7 +213,6 @@ const GroupModal = ({ activeModal, setActiveModal, api, error, setError, fetchGr
             </Radio>
             <Radio
               name="wallpost"
-              value="0"
               checked={newGroup.wallpost === 0}
               onChange={() => setNewGroup(prev => ({ ...prev, wallpost: 0 }))}
             >
@@ -192,19 +221,14 @@ const GroupModal = ({ activeModal, setActiveModal, api, error, setError, fetchGr
           </FormItem>
           
           <FormItem>
-            <Button
-              size="l"
-              stretched
-              onClick={handleAddGroup}
-              disabled={!newGroup.group_id}
-            >
+            <Button size="l" stretched onClick={handleAddGroup} disabled={!newGroup.group_id}>
               Добавить
             </Button>
           </FormItem>
         </FormLayoutGroup>
       </ModalPage>
     </ModalRoot>
-  );
-};
+  )
+}
 
-export default GroupModal;
+export default GroupModal

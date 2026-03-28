@@ -7,7 +7,7 @@
     "axios": "^1.7.2",
     "@testing-library/dom": "^10.4.0",
     "@vkontakte/icons": "^3.7.0",
-    "@vkontakte/vkui": "^7.3.4",
+    "@vkontakte/vkui": "^7.11.7",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-scripts": "5.0.1",
