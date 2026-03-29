@@ -3,7 +3,7 @@
 
 FROM node:20-alpine AS frontend_builder
 
-ARG REACT_API_URL=http://localhost
+ARG REACT_API_URL=http://localhost:12000/
 
 WORKDIR /app/frontend
 
