@@ -1,15 +1,19 @@
 import * as React from 'react';
-import { AppRoot } from '@vkontakte/vkui';
+import {
+  AppRoot,
+} from '@vkontakte/vkui';
 import '@vkontakte/vkui/dist/vkui.css';
-import { AccountsProvider } from './contexts/AccountsContext';
 import EpicComponent from './Epic';
-
-const App = () => (
-  <AppRoot>
-    <AccountsProvider>
+const App = () => {
+  return (
+    <AppRoot>
       <EpicComponent />
-    </AccountsProvider>
-  </AppRoot>
-);
+    </AppRoot>
+  );
+};
+
+
 
 export default App;
+
+
