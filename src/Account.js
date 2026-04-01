@@ -3,14 +3,15 @@ const axios = require('axios');
 module.exports = class ClipperAccount {
     constructor(log) {
         this.logManager = log
-        this.tokenData = null;
-        this.tokenExpires = 0;
-        this.appId = 6287487;
-        this.cookie = null;
-        this._inPromise = null;
+        this.tokenData = null
+        this.tokenExpires = 0
+        this.appId = 6287487
+        this.cookie = null
+        this._inPromise = null
+        this._profile = null
     }
 
-    async setCookie(cookie){
+    setCookie(cookie){
         this.cookie = cookie;
     }
 
@@ -84,6 +85,15 @@ module.exports = class ClipperAccount {
         } catch(e) {
             return []
         }
+    }
+
+    async profile(){
+
+        if(!this._profile){
+            this._profile = await this.getProfileInfo()
+        }
+
+        return this._profile
     }
 
     async getProfileInfo(){

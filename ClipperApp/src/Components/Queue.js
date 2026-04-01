@@ -1,287 +1,205 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react'
 import {
-    Group,
-    Div,
-    RichCell,
-    Text,
-    Button,
-    ButtonGroup,
-    Select,
-    FormItem,
-    Placeholder,
-    SimpleCell,
-    UsersStack,
-    Spinner,
-    Header,
-    IconButton
-} from '@vkontakte/vkui';
+  Group, Div, RichCell, Text, FormItem,
+  Placeholder, Spinner, Header, IconButton, Avatar, ChipsSelect,
+  Button, ButtonGroup
+} from '@vkontakte/vkui'
 import {
-    Icon28DeleteOutline,
-    Icon28VideoSquareOutline,
-    Icon28DocumentOutline,
-    Icon28ErrorCircleOutline,
-    Icon16DownloadOutline,
-    Icon16ArrowUturnLeftOutline,
-    Icon16ArrowshapeLeftRight
-} from '@vkontakte/icons';
+  Icon28DeleteOutline, Icon28DocumentOutline,
+  Icon16DownloadOutline, Icon16ArrowUturnLeftOutline,
+  Icon16ArrowshapeLeftRight
+} from '@vkontakte/icons'
+import { useAccounts } from '../Contexts/AccountsContext'
 
 const Queue = ({ api }) => {
-    const [queue, setQueue] = useState([]);
-    const [groups, setGroups] = useState([]);
-    const [selectedGroup, setSelectedGroup] = useState('all');
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState(null);
+  const { accounts = [] } = useAccounts()
+  const [queue, setQueue] = useState([])
+  const [groups, setGroups] = useState([])
+  const [selectedOwners, setSelectedOwners] = useState([]) 
+  const [selectedGroups, setSelectedGroups] = useState([]) 
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
 
-    useEffect(() => {
-        const loadData = async () => {
-            setIsLoading(true);
-            setError(null);
-
-            try {
-                const [groupsResponse, queueResponse] = await Promise.all([
-                    api.call('groups.get'),
-                    api.call('queue.get')
-                ]);
-
-                setGroups(groupsResponse.response);
-                setQueue(queueResponse.response.items);
-            } catch (err) {
-                setError(err.error_msg || 'Ошибка загрузки данных');
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        loadData();
-    }, [api]);
-
-    const formatTime = (ms) => {
-        if (!ms) return 'В очереди'
-        
-        const date = new Date(ms)
-        const now = new Date()
-        
-        const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        
-        const isToday = date.toDateString() === now.toDateString()
-
-        let pre = ``
-
-        if (!isToday) {
-
-            const months = [
-                'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
-                'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'
-            ]
-            
-            const day = date.getDate()
-            const month = months[date.getMonth()]
-            
-            pre = `${day} ${month} в `
-
-        }else{
-            pre = `Сегодня в `
-        }
-        
-        return pre + timeStr
+  const loadData = async () => {
+    setIsLoading(true)
+    try {
+      const [groupsResponse, queueResponse] = await Promise.all([
+        api.getGroups(),
+        api.getQueue(),
+      ])
+      setGroups(groupsResponse.response || [])
+      setQueue(queueResponse.response?.items || [])
+      setError(null)
+    } catch (err) {
+      setError(err.error_msg || 'Ошибка загрузки данных')
+    } finally {
+      setIsLoading(false)
     }
-    
-    const refreshQueue = async () => {
-        setIsLoading(true);
-        try {
-            const params = selectedGroup !== 'all' ? { group_id: selectedGroup } : {};
-            const response = await api.call('queue.get', params);
-            setQueue(response.response.items);
-        } catch (err) {
-            setError(err.error_msg || 'Ошибка обновления очереди');
-        } finally {
-            setIsLoading(false);
-        }
-    };
+  }
 
-    const handleSaveRestore = async (isSave) => {
-        setIsLoading(true);
-        try {
-            await api.call(isSave ? 'queue.save' : 'queue.restore');
-            await refreshQueue();
-        } catch (err) {
-            setError(err.error_msg || 'Ошибка операции');
-        } finally {
-            setIsLoading(false);
-        }
-    };
+  useEffect(() => {
+    loadData()
+  }, [])
 
-    const handleRemoveTask = async (file, groupId) => {
-        try {
-            await api.call('queue.complete', { file, group_id: groupId });
-            await refreshQueue();
-        } catch (err) {
-            setError(err.error_msg || 'Ошибка при удалении задачи');
-        }
-    };
+  const ownerOptions = accounts.map(acc => ({ 
+    value: String(acc.id), 
+    label: `${acc.first_name} ${acc.last_name}` 
+  }))
 
-    const handleShowVideo = (file) => {
-        api.openVid(file);
-    };
+  const groupOptions = groups
+    .filter(g => {
+      if (selectedOwners.length === 0) return true
+      return selectedOwners.some(o => Number(o.value) === Number(g.owner))
+    })
+    .map(g => ({
+      value: String(g.id),
+      label: g.data?.name || `Группа ${g.id}` 
+    }))
 
-    const getGroupTitle = (groupId) => {
-        const group = groups.find(g => g.id === groupId);
-        return group?.data?.name || `Группа ${groupId}`;
-    };
+  const filteredQueue = queue.filter(task => {
+    const group = groups.find(g => Number(g.id) === Number(task.groupId))
+    if (!group) return false
 
-    const getGroupImg = (groupId) => {
-        const group = groups.find(g => g.id === groupId);
-        return group?.data?.photo_50 || ``;
-    };
+    const matchesOwner = selectedOwners.length === 0 || 
+      selectedOwners.some(o => Number(o.value) === Number(group.owner))
+      
+    const matchesGroup = selectedGroups.length === 0 || 
+      selectedGroups.some(g => Number(g.value) === Number(task.groupId))
 
-    if (isLoading && queue.length === 0) {
-        return (
-            <Group>
-                <Div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}>
-                    <Spinner />
-                </Div>
-            </Group>
-        );
+    return matchesOwner && matchesGroup
+  })
+
+  const formatTime = (ms) => {
+    if (!ms) return 'В очереди'
+    const date = new Date(ms)
+    const now = new Date()
+    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    return (date.toDateString() === now.toDateString() ? 'Сегодня в ' : `${date.getDate()}.${date.getMonth()+1} в `) + timeStr
+  }
+
+  const handleRemoveTask = async (file, groupId) => {
+    try {
+      await api.completeTask(file, groupId)
+      await loadData()
+    } catch (err) {
+      setError(err.error_msg)
     }
+  }
 
-    if (error) {
-        return (
-            <Group>
-                <SimpleCell
-                    before={<Icon28ErrorCircleOutline />}
-                    subtitle={error}
-                >
-                    Ошибка загрузки
-                </SimpleCell>
-            </Group>
-        );
+  const handleDownloadQueue = async () => {
+    try {
+      const response = await api.saveQueue()
+    } catch (err) {
+      setError(err.error_msg)
     }
+  }
 
-    const hasGroups = groups.length > 0;
-    const hasTasks = queue.length > 0;
+  const handleRestoreQueue = async () => {
 
+    try {
+      await api.restoreQueue()
+      await loadData()
+    } catch (err) {
+      setError('Ошибка при восстановлении')
+    }
+  
+  }
+
+  const getGroupInfo = (groupId) => {
+    const group = groups.find(g => g.id === groupId)
+    const owner = accounts.find(acc => acc.id === group?.owner)
+    return { group, owner }
+  }
+
+  if (isLoading && queue.length === 0) {
     return (
-        <>
-            <Group header={<Header size="s">Управление очередью</Header>}>
+      <Group>
+        <Div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}>
+          <Spinner />
+        </Div>
+      </Group>
+    )
+  }
 
-                <FormItem>
-                    <ButtonGroup mode="horizontal" gap="s" stretched>
-                        <Button
-                            size="m"
-                            onClick={refreshQueue}
-                            loading={isLoading}
-                            before={<Icon16ArrowshapeLeftRight />}
-                            stretched
-                        >
-                            Обновить
-                        </Button>
-                        <Button
-                            size="m"
-                            mode="secondary"
-                            before={<Icon16DownloadOutline />}
-                            onClick={() => handleSaveRestore(true)}
-                            loading={isLoading}
-                            stretched
-                            disabled={!hasTasks}
-                        >
-                            Сохранить
-                        </Button>
-                        <Button
-                            size="m"
-                            mode="secondary"
-                            before={<Icon16ArrowUturnLeftOutline />}
-                            onClick={() => handleSaveRestore(false)}
-                            loading={isLoading}
-                            stretched
-                        >
-                            Восстановить
-                        </Button>
-                    </ButtonGroup>
-                </FormItem>
+  return (
+    <>
+      <Group header={<Header size="s">Управление очередью</Header>}>
+        <FormItem>
+          <ChipsSelect
+            value={selectedOwners}
+            onChange={(val) => {
+              setSelectedOwners(val)
+              setSelectedGroups([])
+            }}
+            options={ownerOptions}
+            placeholder="Все аккаунты"
+            emptyText="Ничего не найдено"
+          />
+        </FormItem>
+        
+        {groups.length > 0 && (
+          <FormItem>
+            <ChipsSelect
+              value={selectedGroups}
+              onChange={setSelectedGroups}
+              options={groupOptions}
+              placeholder="Все доступные группы"
+              emptyText="Группы не найдены"
+            />
+          </FormItem>
+        )}
 
-                {hasGroups && (
-                    <FormItem top="Фильтр по группе">
-                        <Select
-                            value={selectedGroup}
-                            onChange={(e) => setSelectedGroup(e.target.value)}
-                            options={[
-                                { value: 'all', label: 'Все группы' },
-                                ...groups.map(g => ({
-                                    value: g.id.toString(),
-                                    label: g.data.name || `Группа ${g.id}`
-                                }))
-                            ]}
-                            disabled={!hasTasks}
-                        />
-                    </FormItem>
-                )}
+        <FormItem>
+          <ButtonGroup mode="horizontal" gap="s" stretched>
+            <Button size="m" onClick={handleDownloadQueue} before={<Icon16DownloadOutline />} mode="secondary" stretched>
+              Скачать
+            </Button>
+            <Button size="m" onClick={handleRestoreQueue} before={<Icon16ArrowUturnLeftOutline />} mode="secondary" stretched>
+              Восстановить
+            </Button>
+            <Button size="m" onClick={loadData} loading={isLoading} before={<Icon16ArrowshapeLeftRight />} stretched>
+              Обновить
+            </Button>
+          </ButtonGroup>
+        </FormItem>
+      </Group>
 
-            </Group>
+      <Group header={<Header size="s">Задачи • {filteredQueue.length}</Header>}>
+        {filteredQueue.length === 0 ? (
+          <Div>
+            <Placeholder>
+              {queue.length === 0 ? "Очередь пуста" : "Ничего не найдено по фильтрам"}
+            </Placeholder>
+          </Div>
+        ) : (
+          filteredQueue.map((task, idx) => {
+            const { group, owner } = getGroupInfo(task.groupId)
+            return (
+              <RichCell
+                key={`${task.file}-${idx}`}
+                before={<Icon28DocumentOutline />}
+                overTitle={formatTime(task.postTime)}
+                caption={
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {owner && <Avatar size={20} src={owner.photo_50} />}
+                    <Text>{group?.data?.name || `Группа ${task.groupId}`}</Text>
+                    {owner && <Text weight="2" style={{ color: 'gray' }}>({owner.first_name})</Text>}
+                  </div>
+                }
+                after={
+                  <IconButton onClick={() => handleRemoveTask(task.file, task.groupId)}>
+                    <Icon28DeleteOutline color="#FF3347" />
+                  </IconButton>
+                }
+              >
+                <Text weight="medium">{task.file}</Text>
+              </RichCell>
+            )
+          })
+        )}
+      </Group>
+    </>
+  )
+}
 
-            <Group header={<Header size="s">Задачи в очереди • {queue.length}</Header>}>
-                {!hasTasks ? (
-                    <Div>
-                        <Placeholder>
-                            Очередь пуста
-                        </Placeholder>
-                    </Div>
-                ) : (
-                    <>
-
-                        {queue.map((task, index) => (
-                            <RichCell
-                                key={index}
-                                before={<Icon28DocumentOutline />}
-                                overTitle={formatTime(task.postTime)}
-                                beforeAlign="center"
-                                afterAlign="center"
-                                contentAlign='start'
-                                bottom={
-                                    task.isAll ? (
-                                        <UsersStack>
-                                            Все группы
-                                        </UsersStack>
-                                    ) : (
-                                        <UsersStack photos={[getGroupImg(task.groupId)]}>
-                                            {getGroupTitle(task.groupId)}
-                                        </UsersStack>
-                                    )
-                                }
-                                after={
-                                    <ButtonGroup mode="horizontal">
-                                        <IconButton
-                                            size="m"
-                                            mode="tertiary"
-                                            appearance="accent"
-                                            onClick={() => handleShowVideo(task.file)}
-
-                                        >
-                                            <Icon28VideoSquareOutline />
-                                        </IconButton>
-                                        <IconButton
-                                            size="m"
-                                            mode="tertiary"
-                                            appearance="negative"
-                                            onClick={() => handleRemoveTask(task.file, task.groupId)}
-                                            before={<Icon28DeleteOutline width={16} height={16} />}
-                                        >
-                                            <Icon28DeleteOutline color="#FF3347" />
-                                        </IconButton>
-                                    </ButtonGroup>
-                                }
-                                textWrap="full"
-                                style={{ padding: '12px 16px' }}
-                            >
-                                <Text weight="medium" ellipsis>
-                                    {task.file}
-                                </Text>
-                            </RichCell>
-                        ))}
-                    </>
-                )}
-            </Group>
-        </>
-    );
-};
-
-export default Queue;
+export default Queue

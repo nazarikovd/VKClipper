@@ -16,10 +16,22 @@ module.exports = class Clipper {
 		this.taskScheduler = new ClipperTaskScheduler()
 		this.tiktokDownloader = new ClipperTikTok()
 		this.queueManager = new ClipperQueueManager(() => this.getCurrentGroups())
-		this.accountManager = new ClipperAccount(this.logManager)
+		this.accountManager = {}
 		this.vkGroups = []
 		this.initAutoSave()
 
+	}
+
+	async addAccount(cookie){
+		const account = new ClipperAccount(this.logManager)
+		account.setCookie(cookie)
+		await account.getToken()
+		const profile = await account.profile()
+    	const userId = profile?.id
+
+    	if (!userId || this.accountManager[userId]) return
+		this.accountManager[userId] = account
+		return userId
 	}
 
 	initAutoSave(){
@@ -44,7 +56,7 @@ module.exports = class Clipper {
 
 	async addVKGroup(groupConfig) {
 
-		const group = new ClipperVKGroup(groupConfig, () => this.accountManager.getToken())
+		const group = new ClipperVKGroup(groupConfig, () => this.accountManager[groupConfig.owner_id].getToken())
 		let groupdata = await group.init()
 		
 		if(groupdata === false){
@@ -58,11 +70,11 @@ module.exports = class Clipper {
 		const schedule = groupConfig.schedule || groupConfig.intervalMinutes || "15"
 
 		this.vkGroups.push({
-			group_id: groupdata.id,
-			group: group,
+			group_id: Number(groupdata.id),
+			owner_id: Number(groupConfig.owner_id),
 			links: [],
 			schedule: schedule,
-			wallpost: groupConfig.wallpost,
+			wallpost: Number(groupConfig.wallpost),
 			data: groupdata
 		})
 		

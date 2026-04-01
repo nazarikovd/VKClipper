@@ -16,20 +16,24 @@ module.exports = class ClipperAPI {
     }
 
     setupRoutes() {
+
         this.app.get('/method/account.checkAuth', (req, res) => {
             try {
-                res.json({ response: !!this.clipper.accountManager.tokenData })
+                const hasAccounts = Object.keys(this.clipper.accountManager).length > 0
+                res.json({ response: hasAccounts })
             } catch (error) {
                 res.json({ error: { error_code: 10, error_msg: 'Internal server error' } })
             }
         })
 
-        this.app.get('/method/account.setCookie', async (req, res) => {
+        this.app.get('/method/account.addAccount', async (req, res) => {
             try {
                 const { cookie } = req.query
-                await this.clipper.accountManager.setCookie(cookie)
-                let token = await this.clipper.accountManager.getToken()
-                res.json({ response: token })
+                const userId = await this.clipper.addAccount(cookie)
+                if (!userId) {
+                    return res.json({ error: { error_code: 5, error_msg: 'Auth failed' } })
+                }
+                res.json({ response: userId }) 
             } catch (error) {
                 res.json({ error: { error_code: 10, error_msg: 'Internal server error' } })
             }
@@ -37,7 +41,13 @@ module.exports = class ClipperAPI {
 
         this.app.get('/method/account.getGroups', async (req, res) => {
             try {
-                const groups = await this.clipper.accountManager.getUserGroups()
+                const { owner } = req.query
+                const account = this.clipper.accountManager[owner]
+                
+                if (!account) {
+                    return res.json({ error: { error_code: 5, error_msg: 'Account not found' } })
+                }
+                const groups = await this.clipper.accountManager[owner].getUserGroups()
                 res.json({ response: groups })
             } catch (error) {
                 res.json({ error: { error_code: 10, error_msg: 'Internal server error' } })
@@ -46,11 +56,34 @@ module.exports = class ClipperAPI {
 
         this.app.get('/method/account.getProfileInfo', async (req, res) => {
             try {
-                if(!this.clipper.accountManager.tokenData) {
-                    return res.json({ error: { error_code: 5, error_msg: 'User authorization failed' } })
+                
+                const { owner } = req.query
+                const account = this.clipper.accountManager[owner]
+
+                if (!account) {
+                    return res.json({ error: { error_code: 5, error_msg: 'Account not found' } })
                 }
-                const profile = await this.clipper.accountManager.getProfileInfo()
+
+                const profile = await this.clipper.accountManager[owner].profile()
                 res.json({ response: profile })
+            } catch (error) {
+                res.json({ error: { error_code: 10, error_msg: 'Internal server error' } })
+            }
+        })
+
+        this.app.get('/method/account.getList', async (req, res) => {
+            try {
+                const accounts = Object.values(this.clipper.accountManager)
+                
+                if (accounts.length === 0) {
+                    return res.json({ error: { error_code: 50, error_msg: 'There is no accounts' } })
+                }
+
+                const list = await Promise.all(
+                    accounts.map(async acc => await acc.profile())
+                )
+
+                res.json({ response: list })
             } catch (error) {
                 res.json({ error: { error_code: 10, error_msg: 'Internal server error' } })
             }
@@ -60,6 +93,7 @@ module.exports = class ClipperAPI {
             try {
                 const groups = this.clipper.vkGroups.map(group => ({
                     id: group.group_id,
+                    owner: group.owner_id,
                     schedule: group.schedule,
                     wallpost: group.wallpost,
                     pending_tasks: this.clipper.queueManager.getClipsForGroup(group.group_id).length,
@@ -74,12 +108,13 @@ module.exports = class ClipperAPI {
 
         this.app.get('/method/groups.add', async (req, res) => {
             try {
-                const { group_id, title, wallpost, schedule, interval } = req.query
+                const { group_id, owner_id, title, wallpost, schedule, interval } = req.query
                 if (!group_id) {
                     return res.json({ error: { error_code: 100, error_msg: 'group_id required' } })
                 }
                 const groupId = await this.clipper.addVKGroup({
                     group_id,
+                    owner_id,
                     title,
                     wallpost,
                     schedule: schedule || interval || "15"
