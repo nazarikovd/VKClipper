@@ -72,6 +72,7 @@ module.exports = class Clipper {
 		this.vkGroups.push({
 			group_id: Number(groupdata.id),
 			owner_id: Number(groupConfig.owner_id),
+			group: group,
 			links: [],
 			schedule: schedule,
 			wallpost: Number(groupConfig.wallpost),
