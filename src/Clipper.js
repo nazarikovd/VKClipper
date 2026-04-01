@@ -70,11 +70,11 @@ module.exports = class Clipper {
 		const schedule = groupConfig.schedule || groupConfig.intervalMinutes || "15"
 
 		this.vkGroups.push({
-			group_id: groupdata.id,
-			group: group,
+			group_id: Number(groupdata.id),
+			owner_id: Number(groupConfig.owner_id),
 			links: [],
 			schedule: schedule,
-			wallpost: groupConfig.wallpost,
+			wallpost: Number(groupConfig.wallpost),
 			data: groupdata
 		})
 		
