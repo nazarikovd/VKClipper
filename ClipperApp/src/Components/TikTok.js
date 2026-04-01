@@ -4,7 +4,7 @@ import {
   Input, Progress, Radio, RadioGroup, Header, Select
 } from '@vkontakte/vkui';
 import { Icon16Add } from '@vkontakte/icons';
-import { useAccounts } from '../contexts/AccountsContext';
+import { useAccounts } from '../Contexts/AccountsContext';
 
 const TikTokBatchUploader = ({ api }) => {
   const { accounts } = useAccounts();

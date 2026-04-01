@@ -15,7 +15,7 @@ import Queue from './Components/Queue';
 import Logs from './Components/Logs';
 import api from './Components/API';
 import TikTokScrap from './Components/TikTokScrap';
-import { useAccounts } from './contexts/AccountsContext';
+import { useAccounts } from './Contexts/AccountsContext';
 
 const EpicComponent = () => {
   const { accounts, loading } = useAccounts();

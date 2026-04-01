@@ -1,20 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState } from 'react'
 import {
-  Group, Placeholder, Button, Textarea, Snackbar, Alert,
+  Placeholder, Button, Textarea, Snackbar, Alert,
   FormItem, FormLayoutGroup, Text
-} from '@vkontakte/vkui';
-import { Icon56KeyOutline, Icon16Done } from '@vkontakte/icons';
-import { useAccounts } from '../contexts/AccountsContext';
+} from '@vkontakte/vkui'
+import { Icon56KeyOutline, Icon16Done } from '@vkontakte/icons'
+import { useAccounts } from '../Contexts/AccountsContext'
 
 const AddAccount = ({ onSuccess }) => {
-  const { addAccount } = useAccounts();
-  const [cookie, setCookie] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(false);
-  const [popout, setPopout] = useState(null);
+  const { addAccount } = useAccounts()
+  const [cookie, setCookie] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [success, setSuccess] = useState(false)
+  const [popout, setPopout] = useState(null)
 
-  const closePopout = () => setPopout(null);
+  const closePopout = () => setPopout(null)
 
   const showHint = () => {
     setPopout(
@@ -33,29 +33,29 @@ const AddAccount = ({ onSuccess }) => {
           </>
         }
       />
-    );
-  };
+    )
+  }
 
   const handleSubmit = async () => {
     if (!cookie.trim()) {
-      setError('Введите cookie');
-      return;
+      setError('Введите cookie')
+      return
     }
-    setLoading(true);
-    setError(null);
+    setLoading(true)
+    setError(null)
     try {
-      await addAccount(cookie.trim());
-      setSuccess(true);
-      if (onSuccess) onSuccess();
+      await addAccount(cookie.trim())
+      setSuccess(true)
+      if (onSuccess) onSuccess()
     } catch (err) {
-      setError(err.message || 'Ошибка авторизации');
+      setError(err.message || 'Ошибка авторизации')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   return (
-    <Group style={{ minHeight: '300px' }}>
+    <>
       {popout}
       <Placeholder icon={<Icon56KeyOutline width={56} height={56} />} header="Авторизация по Cookie">
         Добавление аккаунта VK
@@ -91,8 +91,8 @@ const AddAccount = ({ onSuccess }) => {
           Аккаунт добавлен!
         </Snackbar>
       )}
-    </Group>
-  );
-};
+    </>
+  )
+}
 
-export default AddAccount;
+export default AddAccount

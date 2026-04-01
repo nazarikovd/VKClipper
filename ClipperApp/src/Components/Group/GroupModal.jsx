@@ -3,7 +3,7 @@ import {
   ModalPage, FormItem, Input, Button, FormLayoutGroup, FormStatus,
   ModalRoot, ModalPageHeader, Select, Radio, CustomSelectOption, Avatar, SegmentedControl
 } from "@vkontakte/vkui";
-import { useAccounts } from "../../contexts/AccountsContext";
+import { useAccounts } from "../../Contexts/AccountsContext";
 
 const GroupModal = ({ activeModal, setActiveModal, api, error, setError, fetchGroups }) => {
   const { accounts } = useAccounts();
