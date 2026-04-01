@@ -35,12 +35,10 @@ class ApiClient {
     }
   }
 
-  // Группы, добавленные в бота (с owner_id)
   async getGroups() {
     return this.call('groups.get');
   }
 
-  // Все группы пользователя из VK (для модалки)
   async getUserGroups(owner) {
     return this.call('account.getGroups', { owner });
   }

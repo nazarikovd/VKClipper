@@ -25,7 +25,6 @@ const GroupModal = ({ activeModal, setActiveModal, api, error, setError, fetchGr
     customCron: "* * * * *"
   });
 
-  // При смене аккаунта сбрасываем выбранную группу и загружаем его группы из VK
   useEffect(() => {
     if (!selectedAccountId) {
       setUserGroups([]);
@@ -51,7 +50,6 @@ const GroupModal = ({ activeModal, setActiveModal, api, error, setError, fetchGr
     loadGroups();
   }, [selectedAccountId, api]);
 
-  // Обновляем расписание
   useEffect(() => {
     let finalSchedule = "";
     if (mode === "interval") {
@@ -68,7 +66,6 @@ const GroupModal = ({ activeModal, setActiveModal, api, error, setError, fetchGr
     setNewGroup(prev => ({ ...prev, schedule: finalSchedule }));
   }, [mode, params]);
 
-  // При выборе группы из списка – подставляем title
   const handleGroupSelect = (groupId) => {
     const selected = userGroups.find(g => g.value === groupId);
     setNewGroup(prev => ({

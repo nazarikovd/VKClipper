@@ -14,7 +14,6 @@ const Logs = ({ api }) => {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   
-  // Теперь это массив выбранных типов объектов 📝
   const [selectedTypes, setSelectedTypes] = useState([])
 
   const loadData = async () => {
@@ -34,13 +33,11 @@ const Logs = ({ api }) => {
     loadData()
   }, [])
 
-  // Опции для фильтра
   const typeOptions = [
     { value: 'info', label: 'Информация' },
     { value: 'error', label: 'Ошибки' }
   ]
 
-  // Фильтруем логи "на лету" 🪄
   const filteredLogs = selectedTypes.length > 0
     ? logs.filter(log => selectedTypes.some(t => t.value === log.type))
     : logs

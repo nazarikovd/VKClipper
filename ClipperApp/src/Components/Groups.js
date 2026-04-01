@@ -15,7 +15,6 @@ const Groups = ({ api }) => {
   const [error, setError] = useState(null)
   const [activeModal, setActiveModal] = useState(null)
   
-  // Храним выбранные опции как массив объектов [{value, label}, ...]
   const [selectedOwners, setSelectedOwners] = useState([])
 
   const fetchGroups = async () => {
@@ -36,13 +35,11 @@ const Groups = ({ api }) => {
     return () => clearInterval(interval)
   }, [])
 
-  // Формируем опции для селекта
   const ownerOptions = accounts.map(acc => ({ 
     value: String(acc.id), 
     label: `${acc.first_name} ${acc.last_name}` 
   }))
 
-  // Фильтруем список групп "на лету" 🪄
   const filteredGroups = selectedOwners.length > 0
     ? groups.filter(g => selectedOwners.some(option => option.value === String(g.owner)))
     : groups
