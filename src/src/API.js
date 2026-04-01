@@ -1,0 +1,330 @@
+const express = require('express')
+const Clipper = require('./Clipper')
+const cors = require('cors')
+const path = require('path')
+
+module.exports = class ClipperAPI {
+    
+    constructor(statics, port) {
+        this.clipper = new Clipper()
+        this.app = express()
+        this.port = port
+        this.app.use(express.urlencoded({ extended: true }))
+        this.app.use(cors())
+        this.app.use(express.static(statics))
+        this.setupRoutes()
+    }
+
+    setupRoutes() {
+
+        this.app.get('/method/account.checkAuth', (req, res) => {
+            try {
+                const hasAccounts = Object.keys(this.clipper.accountManager).length > 0
+                res.json({ response: hasAccounts })
+            } catch (error) {
+                res.json({ error: { error_code: 10, error_msg: 'Internal server error' } })
+            }
+        })
+
+        this.app.get('/method/account.addAccount', async (req, res) => {
+            try {
+                const { cookie } = req.query
+                const userId = await this.clipper.addAccount(cookie)
+                if (!userId) {
+                    return res.json({ error: { error_code: 5, error_msg: 'Auth failed' } })
+                }
+                res.json({ response: userId }) 
+            } catch (error) {
+                res.json({ error: { error_code: 10, error_msg: 'Internal server error' } })
+            }
+        })
+
+        this.app.get('/method/account.getGroups', async (req, res) => {
+            try {
+                const { owner } = req.query
+                const account = this.clipper.accountManager[owner]
+                
+                if (!account) {
+                    return res.json({ error: { error_code: 5, error_msg: 'Account not found' } })
+                }
+                const groups = await this.clipper.accountManager[owner].getUserGroups()
+                res.json({ response: groups })
+            } catch (error) {
+                res.json({ error: { error_code: 10, error_msg: 'Internal server error' } })
+            }
+        })
+
+        this.app.get('/method/account.getProfileInfo', async (req, res) => {
+            try {
+                
+                const { owner } = req.query
+                const account = this.clipper.accountManager[owner]
+
+                if (!account) {
+                    return res.json({ error: { error_code: 5, error_msg: 'Account not found' } })
+                }
+
+                const profile = await this.clipper.accountManager[owner].profile()
+                res.json({ response: profile })
+            } catch (error) {
+                res.json({ error: { error_code: 10, error_msg: 'Internal server error' } })
+            }
+        })
+
+        this.app.get('/method/account.getList', async (req, res) => {
+            try {
+                const accounts = Object.values(this.clipper.accountManager)
+                
+                if (accounts.length === 0) {
+                    return res.json({ error: { error_code: 50, error_msg: 'There is no accounts' } })
+                }
+
+                const list = await Promise.all(
+                    accounts.map(async acc => await acc.profile())
+                )
+
+                res.json({ response: list })
+            } catch (error) {
+                res.json({ error: { error_code: 10, error_msg: 'Internal server error' } })
+            }
+        })
+
+        this.app.get('/method/groups.get', (req, res) => {
+            try {
+                const groups = this.clipper.vkGroups.map(group => ({
+                    id: group.group_id,
+                    owner: group.owner_id,
+                    schedule: group.schedule,
+                    wallpost: group.wallpost,
+                    pending_tasks: this.clipper.queueManager.getClipsForGroup(group.group_id).length,
+                    nextRun: this.clipper.taskScheduler.getTimeToNextRun(group.group_id),
+                    data: group.data
+                }))
+                res.json({ response: groups })
+            } catch (error) {
+                res.json({ error: { error_code: 10, error_msg: 'Internal server error' } })
+            }
+        })
+
+        this.app.get('/method/groups.add', async (req, res) => {
+            try {
+                const { group_id, owner_id, title, wallpost, schedule, interval } = req.query
+                if (!group_id) {
+                    return res.json({ error: { error_code: 100, error_msg: 'group_id required' } })
+                }
+                const groupId = await this.clipper.addVKGroup({
+                    group_id,
+                    owner_id,
+                    title,
+                    wallpost,
+                    schedule: schedule || interval || "15"
+                })
+                if(groupId === false){
+                    return res.json({ error: { error_code: 14, error_msg: "Group is wrong" } })
+                }
+                res.json({ response: { group_id: groupId } })
+            } catch (error) {
+                res.json({ error: { error_code: 10, error_msg: error.message } })
+            }
+        })
+
+        this.app.get('/method/groups.delete', async (req, res) => {
+            try {
+                const { group_id } = req.query
+                if (!group_id) {
+                    return res.json({ error: { error_code: 100, error_msg: 'Parameter group_id is required' } })
+                }
+                await this.clipper.remVKGroup(group_id)
+                res.json({ response: 1 })
+            } catch (error) {
+                res.json({ error: { error_code: 10, error_msg: error.message } })
+            }
+        })
+
+        this.app.get('/method/links.add', async (req, res) => {
+            const { link, links, group_id = 'all' } = req.query
+            if (!link && !links) {
+                return res.json({ error: { error_code: 100, error_msg: 'One of link or links is required' } })
+            }
+            if(link){
+                await this.clipper.addTikTokLink(link, group_id)
+                res.json({ response: 1 })
+            } else if(links){
+                let links_array = links.split(",")
+                const {add, done, qid} = this.clipper.queueManager.createLinksQueue()
+                res.json({ response: 1, qid: qid})
+                add(links_array)
+                this.clipper.addTikTokLinks(links_array, group_id, done)
+            }
+        })
+
+        this.app.get('/method/links.getByTag', async (req, res) => {
+            const { tag } = req.query
+            if (!tag) {
+                return res.json({ error: { error_code: 100, error_msg: 'One tag is required' } })
+            }
+            try {
+                let linksdata = await this.clipper.tiktokDownloader.getTikToksFromTag(tag)
+                if(linksdata){
+                    res.json({ response: 1, links: linksdata})
+                } else {
+                    res.json({ error: { error_code: 6, error_msg: "No links" } })
+                }
+            } catch(e) {
+                res.json({ error: { error_code: 10, error_msg: e.message } })
+            }
+        })
+
+        this.app.get('/method/links.getProgress', async (req, res) => {
+            try {
+                const { queue_id } = req.query
+                let qid = Number(queue_id)
+                res.json({ progress: this.clipper.queueManager.getLinkQueueProgress(qid) })
+            } catch (error) {
+                res.json({ error: { error_code: 10, error_msg: error.message } })
+            }
+        })
+
+        this.app.get('/method/queue.get', (req, res) => {
+            try {
+                const { group_id } = req.query
+                let tasks = group_id ? this.clipper.queueManager.getClipsForGroup(group_id) : this.clipper.queueManager.queue
+                
+                const groupCursors = new Map()
+
+                const itemsWithTime = tasks.map((task) => {
+                    const groupId = Number(task.groupId)
+                    const groupTask = this.clipper.taskScheduler.tasks.get(groupId)
+                    
+                    let postTime = null
+                    if (groupTask) {
+                        if (!groupCursors.has(groupId)) {
+                            groupCursors.set(groupId, groupTask.nextRun)
+                        }
+                        
+                        postTime = groupCursors.get(groupId)
+                        
+
+                        const nextTick = this.clipper.taskScheduler._calculateNext(
+                            groupTask.schedule, 
+                            postTime
+                        )
+                        
+                        groupCursors.set(groupId, nextTick)
+                    }
+
+                    return {
+                        ...task,
+                        postTime: postTime
+                    }
+                })
+
+                res.json({
+                    response: {
+                        count: itemsWithTime.length,
+                        finished: this.clipper.queueManager.finished,
+                        items: itemsWithTime
+                    }
+                })
+            } catch (error) {
+                res.json({ error: { error_code: 10, error_msg: error.message } })
+            }
+        })
+
+        this.app.get('/method/queue.complete', (req, res) => {
+            try {
+                const { file, group_id } = req.query
+                this.clipper.queueManager.completeTask(file, Number(group_id))
+                res.json({ response: { success: true } })
+            } catch (error) {
+                res.json({ error: { error_code: 10, error_msg: error.message } })
+            }
+        })
+
+        this.app.get('/method/queue.save', async (req, res) => {
+            try {
+                let sv = await this.clipper.saveQ()
+                res.json({ response: { success: sv } })
+            } catch (error) {
+                res.json({ error: { error_code: 10, error_msg: error.message } })
+            }
+        })
+
+        this.app.get('/method/queue.restore', async (req, res) => {
+            try {
+                let sv = await this.clipper.restoreQ()
+                res.json({ response: { success: sv } })
+            } catch (error) {
+                res.json({ error: { error_code: 10, error_msg: error.message } })
+            }
+        })
+
+        this.app.get('/method/tasks.get', (req, res) => {
+            try {
+                const tasks = Array.from(this.clipper.taskScheduler.tasks.values()).map(task => ({
+                    id: task.id,
+                    group_id: task.group_id,
+                    schedule: task.schedule,
+                    nextRun: task.nextRun,
+                    isRunning: task.isRunning,
+                    isCron: task.isCron
+                }))
+                res.json({ response: { count: tasks.length, items: tasks } })
+            } catch (e) {
+                res.status(500).json({ error: e.message })
+            }
+        })
+
+        this.app.get('/method/tasks.getNextById', (req, res) => {
+            const { group_id } = req.query
+            try {
+                let next = this.clipper.taskScheduler.getTimeToNextRun(Number(group_id))
+                res.json({ response: { response: next } })
+            } catch (e) {
+                res.status(500).json({ error: e.message })
+            }
+        })
+
+        this.app.get('/method/tasks.getAllNext', (req, res) => {
+            try {
+                let tasks = this.clipper.taskScheduler.getAllNextIntervals()
+                res.json({ response: { response: tasks } })
+            } catch (e) {
+                res.status(500).json({ error: e.message })
+            }
+        })
+
+        this.app.get('/method/logs.get', (req, res) => {
+            try {
+                const { type, from } = req.query
+                if(type) return res.json({ response: { logs: this.clipper.logManager.getByType(type) } })
+                if(from) return res.json({ response: { logs: this.clipper.logManager.getByFrom(from) } })
+                return res.json({ response: { logs: this.clipper.logManager.getAll() } })
+            } catch(e) {
+                res.status(500).json({ error: e.message })
+            }
+        })
+
+        this.app.get('/method/files.showVideo', async (req, res) => {
+            const ALLOWED_FILENAME_REGEX = /^[a-zA-Z0-9\-_]+\.mp4$/
+            try {
+                const { file } = req.query
+                if (!ALLOWED_FILENAME_REGEX.test(file)) {
+                    return res.json({ error: { error_code: 3, error_msg: 'I Have no video like that sussss stafff' } })
+                }
+                let video = await this.clipper.fileManager.readClip(file)
+                if(!video) {
+                    return res.json({ error: { error_code: 2, error_msg: 'I Have no video like that' } })
+                }
+                res.set({ 'Content-Type': 'video/mp4', 'Content-Length': video.length })
+                res.send(video)
+            } catch (error) {
+                res.json({ error: { error_code: 10, error_msg: 'Internal server error' } })
+            }
+        })
+
+        this.app.listen(this.port, () => {
+            console.log(`Clipper API running on port ${this.port}`)
+        })
+    }
+}
