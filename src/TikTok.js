@@ -1,10 +1,19 @@
 const { tiktokdl:dl } = require('tiktokdl') 
 const axios = require("axios")
+const { SocksProxyAgent } = require('socks-proxy-agent')
 
 module.exports = class ClipperTikTok{
 
-    constructor(){
+    constructor() {
 
+        this.proxyUrl = process.env.TIKTOK_S5_PROXY_URL || null
+        this.agent = this.proxyUrl ? new SocksProxyAgent(this.proxyUrl) : null
+
+        this.axiosInstance = axios.create({
+            httpsAgent: this.agent,
+            httpAgent: this.agent,
+            timeout: 30000,
+        })
     }
 
     async getVideo(url){
@@ -20,7 +29,7 @@ module.exports = class ClipperTikTok{
     
     async getTikToksFromTag(tag){
 
-        let res = await axios.get("https://www.tiktok.com/api/seo/kap/video_list/", {
+        let res = await this.axiosInstance.get("https://www.tiktok.com/api/seo/kap/video_list/", {
             params: {
                 'WebIdLastTime': '0',
                 'aid': '1988',
@@ -49,8 +58,8 @@ module.exports = class ClipperTikTok{
                 'offset': '0',
                 'os': 'windows',
                 'pageType': '11',
-                'priority_region': "RU",
-                'region': "RU",
+                'priority_region': "US",
+                'region': "US",
                 'root_referer': 'https://www.google.com/',
                 'screen_height': '768',
                 'screen_width': '1360',

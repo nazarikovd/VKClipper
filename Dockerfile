@@ -4,6 +4,7 @@
 FROM node:20-alpine AS frontend_builder
 
 ARG REACT_API_URL=http://localhost:12000/
+ARG TIKTOK_S5_PROXY_URL=
 
 WORKDIR /app/frontend
 
@@ -13,6 +14,7 @@ COPY ClipperApp/ ./
 RUN npm install
 
 ENV REACT_APP_API_URL=${REACT_API_URL}
+ENV TIKTOK_S5_PROXY_URL=${TIKTOK_S5_PROXY_URL}
 
 RUN npm run build
 
