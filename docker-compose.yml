@@ -1,0 +1,13 @@
+services:
+  vkclipper-bot:
+    build:
+      context: ./
+      args:
+        REACT_API_URL: http://localhost:12000
+        TIKTOK_S5_PROXY_URL: ""
+    container_name: vkclipper-bot
+    restart: unless-stopped
+    user: node
+    working_dir: /app
+    ports:
+      - "12000:12000"

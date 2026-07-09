@@ -72,13 +72,10 @@ module.exports = class ClipperTikTok{
 
         let l = []
         try{
-            res.data.videoList.forEach(a => l.push(`https://tiktok.com/share/video/${a.id}`))
-            return l
+            return res.data.videoList
         }catch(e){
-            return false
+            return []
         }
         
-
-
     }
 }
