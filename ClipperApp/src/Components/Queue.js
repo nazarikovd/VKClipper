@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import {
-  Group, Div, RichCell, Text, FormItem,
-  Placeholder, Spinner, Header, IconButton, Avatar, ChipsSelect,
-  Button, ButtonGroup
+  Group, Div, FormItem,
+  Placeholder, Spinner, Header, Avatar, ChipsSelect,
+  Button, ButtonGroup, Image, SimpleGrid, ToolButton, ContentBadge, useAdaptivityWithJSMediaQueries
 } from '@vkontakte/vkui'
 import {
-  Icon28DeleteOutline, Icon28DocumentOutline,
+  Icon20DeleteOutline,
   Icon16DownloadOutline, Icon16ArrowUturnLeftOutline,
-  Icon16ArrowshapeLeftRight
+  Icon16ArrowshapeLeftRight, Icon20LinkCircleOutline
 } from '@vkontakte/icons'
 import { useAccounts } from '../Contexts/AccountsContext'
 
@@ -19,6 +19,8 @@ const Queue = ({ api }) => {
   const [selectedGroups, setSelectedGroups] = useState([]) 
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
+  const baseURL = api.getBaseUrl()
+  const {viewWidth} = useAdaptivityWithJSMediaQueries();
 
   const loadData = async () => {
     setIsLoading(true)
@@ -74,7 +76,9 @@ const Queue = ({ api }) => {
     const date = new Date(ms)
     const now = new Date()
     const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    return (date.toDateString() === now.toDateString() ? 'Сегодня в ' : `${date.getDate()}.${date.getMonth()+1} в `) + timeStr
+    return (date.toDateString() === now.toDateString() 
+    ? 'Сегодня в ' 
+    : `${date.getDate()}.${String(date.getMonth() + 1).padStart(2, '0')} в `) + timeStr
   }
 
   const handleRemoveTask = async (file, groupId) => {
@@ -103,6 +107,10 @@ const Queue = ({ api }) => {
       setError('Ошибка при восстановлении')
     }
   
+  }
+
+  const open = (file) => {
+    window.open(`${baseURL}method/files.showVideo?file=${file}`, "_blank", "noopener,noreferrer");
   }
 
   const getGroupInfo = (groupId) => {
@@ -165,38 +173,70 @@ const Queue = ({ api }) => {
       </Group>
 
       <Group header={<Header size="s">Задачи • {filteredQueue.length}</Header>}>
-        {filteredQueue.length === 0 ? (
-          <Div>
-            <Placeholder>
-              {queue.length === 0 ? "Очередь пуста" : "Ничего не найдено по фильтрам"}
-            </Placeholder>
-          </Div>
-        ) : (
-          filteredQueue.map((task, idx) => {
-            const { group, owner } = getGroupInfo(task.groupId)
-            return (
-              <RichCell
-                key={`${task.file}-${idx}`}
-                before={<Icon28DocumentOutline />}
-                overTitle={formatTime(task.postTime)}
-                caption={
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {owner && <Avatar size={20} src={owner.photo_50} />}
-                    <Text>{group?.data?.name || `Группа ${task.groupId}`}</Text>
-                    {owner && <Text weight="2" style={{ color: 'gray' }}>({owner.first_name})</Text>}
-                  </div>
-                }
-                after={
-                  <IconButton onClick={() => handleRemoveTask(task.file, task.groupId)}>
-                    <Icon28DeleteOutline color="#FF3347" />
-                  </IconButton>
-                }
-              >
-                <Text weight="medium">{task.file}</Text>
-              </RichCell>
-            )
-          })
-        )}
+          {filteredQueue.length === 0 ? (
+            <Div>
+              <Placeholder>
+                Очередь пуста
+              </Placeholder>
+            </Div>
+          ) : (
+            <SimpleGrid gap="m" columns={Math.min(viewWidth, 2)}>
+              {filteredQueue.map((task, idx) => {
+                const { group, owner } = getGroupInfo(task.groupId)
+                return (
+                  <Image 
+                    borderRadius="l"
+                    style={{ 
+                        width: '100%', 
+                        aspectRatio: '9 / 16',
+                    }}
+                    heightSize={480}
+                    objectFit="cover"
+                    src={`${baseURL}method/files.showCover?file=${task.file}`}>
+
+                    <Image.FloatElement placement="top-start" inlineIndent="s" blockIndent="s">
+                      <ContentBadge size="m" mode="outline" appearance="overlay" weight="2" >
+                        {group.data.name}
+                        <ContentBadge.SlotIcon>
+                          <Avatar size={16} src={group.data.photo_100} />
+                        </ContentBadge.SlotIcon>
+                      </ContentBadge>
+                    </Image.FloatElement>
+
+                    <Image.FloatElement placement="top-end" inlineIndent="s" blockIndent="s">
+                      <ContentBadge size="m" mode="outline" appearance="overlay" weight="3" >
+                         {formatTime(task.postTime)}
+                      </ContentBadge>
+                    </Image.FloatElement>
+
+                    <Image.FloatElement placement="bottom-end" inlineIndent="s" blockIndent="s">
+                      <ToolButton 
+                        mode="secondary" 
+                        appearance="neutral"
+                        IconCompact={Icon20DeleteOutline}
+                        IconRegular={Icon20DeleteOutline}
+                        onClick={() => handleRemoveTask(task.file, task.groupId)}
+                      >
+                      </ToolButton> 
+                    </Image.FloatElement>
+                    <Image.FloatElement placement="bottom-start" inlineIndent="s" blockIndent="s">
+                      <ToolButton 
+                        mode="secondary" 
+                        appearance="neutral"
+                        IconCompact={Icon20LinkCircleOutline}
+                        IconRegular={Icon20LinkCircleOutline}
+                        onClick={(e) => {
+                          open(task.file)
+                        }}
+                      >
+                        Открыть
+                      </ToolButton>
+                    </Image.FloatElement>
+                  </Image>
+                )
+              })}
+            </SimpleGrid>
+          )}
       </Group>
     </>
   )
