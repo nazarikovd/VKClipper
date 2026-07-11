@@ -1,12 +1,12 @@
 # build react
-
-
 FROM node:20-alpine AS frontend_builder
 
 ARG REACT_API_URL=http://localhost:12000/
 ARG TIKTOK_S5_PROXY_URL=
 
 WORKDIR /app/frontend
+
+RUN apk add --no-cache ffmpeg
 
 COPY ClipperApp/package*.json ./
 COPY ClipperApp/ ./
@@ -20,20 +20,21 @@ RUN npm run build
 
 
 # build server
-
 FROM node:20-alpine AS backend_builder
 
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install --production
+RUN npm install
 
 
 # start
-
 FROM node:20-alpine
 
 WORKDIR /app
+
+# Установка ffmpeg для работы в финальном образе
+RUN apk add --no-cache ffmpeg
 
 RUN chown -R node:node /app
 
