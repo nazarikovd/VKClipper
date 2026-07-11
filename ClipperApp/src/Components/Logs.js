@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import {
-  Group, Div, Button, FormItem, RichCell, Spinner, 
+  Group, Div, FormItem, RichCell, Spinner, 
   Placeholder, Header, ChipsSelect
 } from '@vkontakte/vkui'
 import {
   Icon28FolderSimpleOutline, Icon28Settings, Icon28VideoSquareOutline,
   Icon28ErrorCircleOutline, Icon28UserTagOutline, Icon28Users3Outline,
-  Icon28StopwatchOutline, Icon16ArrowshapeLeftRight
+  Icon28StopwatchOutline
 } from '@vkontakte/icons'
 
 const Logs = ({ api }) => {

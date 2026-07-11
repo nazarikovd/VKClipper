@@ -2,6 +2,7 @@ import axios from 'axios';
 
 class ApiClient {
   constructor(baseURL) {
+    this._baseURL = baseURL
     this.axios = axios.create({
       baseURL,
       timeout: 10000,
@@ -35,6 +36,9 @@ class ApiClient {
     }
   }
 
+  getBaseUrl(){
+    return this._baseURL;
+  }
   async getGroups() {
     return this.call('groups.get');
   }

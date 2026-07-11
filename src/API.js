@@ -219,6 +219,8 @@ module.exports = class ClipperAPI {
                     }
                 })
 
+                itemsWithTime.sort((a, b) => (a.postTime || Infinity) - (b.postTime || Infinity))
+                
                 res.json({
                     response: {
                         count: itemsWithTime.length,
@@ -318,6 +320,27 @@ module.exports = class ClipperAPI {
                 }
                 res.set({ 'Content-Type': 'video/mp4', 'Content-Length': video.length })
                 res.send(video)
+            } catch (error) {
+                res.json({ error: { error_code: 10, error_msg: 'Internal server error' } })
+            }
+        })
+
+        this.app.get('/method/files.showCover', async (req, res) => {
+            const ALLOWED_FILENAME_REGEX = /^[a-zA-Z0-9\-_]+\.mp4$/
+            try {
+                const { file } = req.query
+                if (!ALLOWED_FILENAME_REGEX.test(file)) {
+                    return res.json({ error: { error_code: 3, error_msg: 'Invalid filename sussss stafff' } })
+                }
+
+                let cover = await this.clipper.fileManager.readCover(file)
+                
+                if(!cover) {
+                    return res.json({ error: { error_code: 2, error_msg: 'I Have no cover like that' } })
+                }
+                
+                res.set({ 'Content-Type': 'image/jpeg', 'Content-Length': cover.length })
+                res.send(cover)
             } catch (error) {
                 res.json({ error: { error_code: 10, error_msg: 'Internal server error' } })
             }
