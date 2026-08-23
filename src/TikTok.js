@@ -1,4 +1,3 @@
-const { tiktokdl:dl } = require('tiktokdl') 
 const axios = require("axios")
 const { SocksProxyAgent } = require('socks-proxy-agent')
 
@@ -23,8 +22,12 @@ module.exports = class ClipperTikTok{
     }
 
     async _getVideoUrl(url){
-        let data = await dl(url)
-        return data.video
+        let req = await axios.post("https://www.tikwm.com/api/", { url, hd: 1 })
+        if(req.data.code !== 0){
+            return
+        }
+        let videourl = req.data.data.hdplay || req.data.data.play
+        return videourl
     }
     
     async getTikToksFromTag(tag){

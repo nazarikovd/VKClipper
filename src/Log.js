@@ -1,23 +1,23 @@
 module.exports = class ClipperLogManager {
     constructor(maxLogs = 1000) {
-        this.logstore = [];
-        this.maxLogs = maxLogs;
+        this.logstore = []
+        this.maxLogs = maxLogs
     }
 
     E(message, from="main") {
-        this.log('error', message, from);
+        this.log('error', message, from)
     }
 
     S(message, from="main") {
-        this.log('status', message, from);
+        this.log('status', message, from)
     }
 
     W(message, from="main") {
-        this.log('warn', message, from);
+        this.log('warn', message, from)
     }
 
     I(message, from="main") {
-        this.log('info', message, from);
+        this.log('info', message, from)
     }
 
     log(type, message, from) {
@@ -25,58 +25,57 @@ module.exports = class ClipperLogManager {
             type,
             message,
             timestamp: new Date().toISOString(),
-            from: from
-        };
+            from
+        }
         
         this.logstore = [logEntry, ...this.logstore]
         
         if (this.logstore.length > this.maxLogs) {
-            this.logstore.shift();
+            this.logstore.length = Math.floor(this.maxLogs / 2)
         }
     }
 
     getW() {
-        return this.logstore.filter(entry => entry.type === 'warn');
+        return this.logstore.filter(entry => entry.type === 'warn')
     }
 
     getE() {
-        return this.logstore.filter(entry => entry.type === 'error');
+        return this.logstore.filter(entry => entry.type === 'error')
     }
 
     getI() {
-        return this.logstore.filter(entry => entry.type === 'info');
+        return this.logstore.filter(entry => entry.type === 'info')
     }
 
     getS() {
-        return this.logstore.filter(entry => entry.type === 'status');
+        return this.logstore.filter(entry => entry.type === 'status')
     }
 
     getAll() {
-        return [...this.logstore];
+        return [...this.logstore]
     }
 
     clear() {
-        this.logstore = [];
+        this.logstore = []
     }
 
     getLast(n = 1) {
-        return this.logstore.slice(-n);
+        return this.logstore.slice(-n)
     }
 
-    
     getByType(type) {
-        return this.logstore.filter(entry => entry.type === type);
+        return this.logstore.filter(entry => entry.type === type)
     }
 
     getByTypes(types) {
-        return this.logstore.filter(entry => types.includes(entry.type));
+        return this.logstore.filter(entry => types.includes(entry.type))
     }
 
     getByFrom(from) {
-        return this.logstore.filter(entry => entry.from === from);
+        return this.logstore.filter(entry => entry.from === from)
     }
 
     getByFroms(froms) {
-        return this.logstore.filter(entry => froms.includes(entry.from));
+        return this.logstore.filter(entry => froms.includes(entry.from))
     }
-};
+}

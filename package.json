@@ -19,7 +19,6 @@
     "jsonfile": "^6.1.0",
     "node-cron": "^3.0.3",
     "socks-proxy-agent": "^10.1.0",
-    "tiktokdl": "^0.0.5",
     "vk-io": "^4.9.1"
   }
 }

@@ -3,7 +3,7 @@ services:
     build:
       context: ./
       args:
-        REACT_API_URL: http://localhost:12000
+        REACT_API_URL: http://localhost:12000/
         TIKTOK_S5_PROXY_URL: ""
     container_name: vkclipper-bot
     restart: unless-stopped
