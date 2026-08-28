@@ -5,6 +5,7 @@ const ClipperTikTok = require("./TikTok");
 const ClipperTaskScheduler = require("./Sheduler");
 const ClipperAccount = require("./Account");
 const ClipperLogManager = require("./Log");
+const ClipperDB = require('./Database');
 
 module.exports = class Clipper {
 
@@ -16,22 +17,47 @@ module.exports = class Clipper {
 		this.taskScheduler = new ClipperTaskScheduler()
 		this.tiktokDownloader = new ClipperTikTok()
 		this.queueManager = new ClipperQueueManager(() => this.getCurrentGroups())
+		this.database = new ClipperDB()
 		this.accountManager = {}
 		this.vkGroups = []
 		this.initAutoSave()
-
+		this.restoreState()
 	}
 
-	async addAccount(cookie){
-		const account = new ClipperAccount(this.logManager)
-		account.setCookie(cookie)
-		await account.getToken()
-		const profile = await account.profile()
-    	const userId = profile?.id
+	async addAccount(cookie) {
+	    const account = new ClipperAccount(this.logManager)
+	    account.setCookie(cookie)
 
-    	if (!userId || this.accountManager[userId]) return
-		this.accountManager[userId] = account
-		return userId
+	    await account.getToken()
+	    const profile = await account.profile()
+	    const userId = profile?.id
+
+	    if (!userId || this.accountManager[userId]) return
+
+	    account.once('deleted', async () => {
+	        try {
+	            await this.delAccount(userId)
+	        } catch (err) {
+	            this.logManager.E(`Failed cleanup for ${userId}: ${err.message}`, "account")
+	        }
+	    })
+
+	    this.logManager.I(`Adding new account ${userId} (${profile.first_name} ${profile.last_name})`, "account")
+	    this.accountManager[userId] = account
+	    this.database.saveAccount(userId, cookie, profile)
+	    return userId
+	}
+
+	async delAccount(owner_id){
+		let oid = Number(owner_id)
+		const account = this.accountManager[oid]
+		if(!account){
+			return false
+		}
+		this.logManager.I(`Removing account ${oid}`, "account")
+		await this.cleanUp(oid)
+		delete this.accountManager[oid]
+		this.database.removeAccount(oid)
 	}
 
 	initAutoSave(){
@@ -80,7 +106,7 @@ module.exports = class Clipper {
 		})
 		
 		this.taskScheduler.addTask(groupdata.id, () => this.processGroupLinks(groupdata.id), schedule)
-		
+		this.database.saveGroup(groupdata, groupConfig.owner_id, schedule, Number(groupConfig.wallpost))
 		this.logManager.I(`Added group [${groupdata.screen_name}] (schedule: ${schedule} wall: ${groupConfig.wallpost})`, "groups")
 		return groupdata.id
 	}
@@ -93,6 +119,7 @@ module.exports = class Clipper {
 		if (!del) {
 			return false;
 		}
+
 		this.taskScheduler.remTask(gid);
 		const groupClips = this.queueManager.getClipsForGroup(gid);
 
@@ -110,9 +137,25 @@ module.exports = class Clipper {
 				
 		)
 		this.vkGroups = this.vkGroups.filter(g => g.group_id !== gid)
+		this.database.removeGroup(gid)
 		this.logManager.I(`Removed group. [${del.data.screen_name}]`, "groups");
 		return true;
 
+	}
+
+	async cleanUp(owner_id){
+
+		let oid = Number(owner_id)
+		const del = this.vkGroups.filter(g => g.owner_id === oid)
+
+		if (del.length === 0){
+        	return false
+    	}
+
+		for(let group of del){
+			await this.remVKGroup(group.group_id)
+		}
+		
 	}
 
 	async addTikTokLink(link, groupId = 'all', fromBatch=false) {
@@ -205,6 +248,68 @@ module.exports = class Clipper {
 		return true
 	}
 
+	async restoreState() {
+	    const rawAccounts = this.database.getAccounts();
+	    const rawGroups = this.database.getGroups();
+
+	    for (const acc of rawAccounts) {
+	        const account = new ClipperAccount(this.logManager);
+	        account.setCookie(acc.cookie);
+	        account.userId = acc.user_id;
+	        
+	        try {
+	            account._profile = acc.profile ? JSON.parse(acc.profile) : null;
+	        } catch (e) {
+	            account._profile = null;
+	        }
+
+	        account.once('deleted', async () => {
+	            try { await this.delAccount(acc.user_id); } catch (err) {}
+	        });
+
+	        this.accountManager[acc.user_id] = account;
+	    }
+
+	    for (const g of rawGroups) {
+
+	        if (!this.accountManager[g.owner_id]) {
+	            this.logManager.E(`Group ${g.group_id} has no owner (user ${g.owner_id} not found), skipping...`, "db");
+	            this.database.removeGroup(g.group_id);
+	            continue;
+	        }
+
+	        let parsedData = null;
+	        try {
+	            parsedData = g.data ? JSON.parse(g.data) : null;
+	        } catch (e) {
+	            this.logManager.E(`Corrupted data for group ${g.group_id}, skipping...`, "db");
+	            continue;
+	        }
+
+	        const groupConfig = {
+	            group_id: g.group_id,
+	            owner_id: g.owner_id,
+	            schedule: g.schedule,
+	            wallpost: g.wallpost
+	        };
+
+	        const group = new ClipperVKGroup(groupConfig, () => this.accountManager[g.owner_id].getToken());
+	        
+	        this.vkGroups.push({
+	            group_id: Number(g.group_id),
+	            owner_id: Number(g.owner_id),
+	            group: group,
+	            links: [],
+	            schedule: g.schedule,
+	            wallpost: Number(g.wallpost),
+	            data: parsedData
+	        });
+
+	        this.taskScheduler.addTask(g.group_id, () => this.processGroupLinks(g.group_id), g.schedule);
+	    }
+
+	    this.logManager.I(`State restored: ${Object.keys(this.accountManager).length} accounts, ${this.vkGroups.length} groups`, "db");
+	}
 
 }
 

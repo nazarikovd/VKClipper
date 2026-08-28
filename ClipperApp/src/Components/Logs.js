@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import {
   Group, Div, FormItem, RichCell, Spinner, 
-  Placeholder, Header, ChipsSelect
+  Placeholder, Header, ChipsSelect, Alert
 } from '@vkontakte/vkui'
 import {
   Icon28FolderSimpleOutline, Icon28Settings, Icon28VideoSquareOutline,
@@ -13,7 +13,7 @@ const Logs = ({ api }) => {
   const [logs, setLogs] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
-  
+  const [logShowData, setLogShowData] = useState(null);
   const [selectedTypes, setSelectedTypes] = useState([])
 
   const loadData = async () => {
@@ -28,6 +28,22 @@ const Logs = ({ api }) => {
       setIsLoading(false)
     }
   }
+
+  const showLog = (title, data) => {
+    if (logShowData) return;
+    setLogShowData(
+      <Alert
+        onClosed={() => setLogShowData(null)}
+        dismissLabel="Отмена"
+        actions={[
+          { title: 'Отмена', mode: 'cancel' },
+          { title: 'Удалить', mode: 'destructive' },
+        ]}
+        title={title}
+        description={data}
+      />,
+    );
+  };
 
   useEffect(() => {
     loadData()
@@ -77,6 +93,7 @@ const Logs = ({ api }) => {
 
   return (
     <>
+      {logShowData}
       <Group header={<Header size="s">Управление логами</Header>}>
         <FormItem>
           <ChipsSelect
@@ -105,6 +122,7 @@ const Logs = ({ api }) => {
               extraSubtitle={new Date(log.timestamp).toLocaleString()}
               beforeAlign="center"
               contentAlign="start"
+              onClick={ () => { showLog(getLogSourceName(log.from), log.message) } }
             >
               {getLogSourceName(log.from)}
             </RichCell>

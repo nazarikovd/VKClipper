@@ -121,7 +121,7 @@ const TikTokScrap = ({ api }) => {
 
       {videos.length > 0 && (
 
-        <Group header={<Header size="s">Результаты: {videos.length}</Header>}>
+        <Group header={<Header size="s">Результаты • {videos.length}</Header>}>
           <SimpleGrid gap="m" columns={Math.min(viewWidth, 3)}>
 
             {videos.map((item) => {

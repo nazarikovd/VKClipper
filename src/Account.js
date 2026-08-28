@@ -1,7 +1,10 @@
 const axios = require('axios');
+const { EventEmitter } = require('events')
 
-module.exports = class ClipperAccount {
+module.exports = class ClipperAccount extends EventEmitter {
     constructor(log) {
+        super()
+        this.isDead = false
         this.logManager = log
         this.tokenData = null
         this.tokenExpires = 0
@@ -16,6 +19,11 @@ module.exports = class ClipperAccount {
     }
 
     async getToken() {
+
+        if (this.isDead) {
+            this.logManager.E(`Deleted trying to get token: ${error.message}`, "account");
+            throw new Error()
+        }
 
         if (this.tokenData && Date.now() < this.tokenExpires - 60000) {
             return this.tokenData.access_token;
@@ -56,11 +64,13 @@ module.exports = class ClipperAccount {
                 this.logManager.I(`Refresh access_token. Expires at ${new Date(this.tokenExpires).toLocaleString()}`, "account");
                 return this.tokenData.access_token;
             } else {
-                this.logManager.E(`Auth error: ${JSON.stringify(response.data)}`, "account");
+                this.logManager.E(`Auth error: ${JSON.stringify(response.data)}`, "account")
+                throw new Error()
             }
         } catch (error) {
-            this.logManager.E(`Refresh access_token error: ${error.message}`, "account");
-            throw error;
+            this.logManager.E(`Refresh access_token error: ${error.message}`, "account")
+            this.die()
+            throw error
         }
     }
 
@@ -106,9 +116,18 @@ module.exports = class ClipperAccount {
         const response = await axios.get(`https://api.vk.com/method/users.get?${q}`)
 
         if(!response.data.response[0] || response.data.response.count === 0){
+            this.logManager.E(`getProfileInfo error: ${error.message}`, "account");
+            this.die()
             throw new Error()
         }
         return response.data.response[0]
 
+    }
+
+    die() {
+        if (this.isDead) return
+        this.logManager.E(`Some account is marked as DELETED.`, "account");
+        this.isDead = true
+        this.emit('deleted')
     }
 }

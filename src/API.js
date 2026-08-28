@@ -39,6 +39,19 @@ module.exports = class ClipperAPI {
             }
         })
 
+        this.app.get('/method/account.delAccount', async (req, res) => {
+            try {
+                const { userId } = req.query
+                const del = await this.clipper.delAccount(userId)
+                if (!del) {
+                    return res.json({ error: { error_code: 1, error_msg: 'Failed' } })
+                }
+                res.json({ response: 1 }) 
+            } catch (error) {
+                res.json({ error: { error_code: 10, error_msg: 'Internal server error' } })
+            }
+        })
+
         this.app.get('/method/account.getGroups', async (req, res) => {
             try {
                 const { owner } = req.query

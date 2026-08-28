@@ -11,3 +11,5 @@ services:
     working_dir: /app
     ports:
       - "12000:12000"
+    volumes:
+      - ./data:/app/data
