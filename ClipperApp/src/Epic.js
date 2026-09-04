@@ -57,7 +57,7 @@ const EpicComponent = () => {
             <TabbarItem onClick={onStoryChange} selected={activeStory === 'profile'} data-story="profile" label="Логи" disabled={!isAuthorized}><Icon28ArticleOutline /></TabbarItem>
           </Tabbar>
         )}>
-          <View id="main" activePanel="main"><Panel id="main"><PanelHeader>Статус</PanelHeader><Main /></Panel></View>
+          <View id="main" activePanel="main"><Panel id="main"><PanelHeader>Статус</PanelHeader><Main api={api} /></Panel></View>
           <View id="groups" activePanel="groups"><Panel id="groups"><PanelHeader before={<PanelHeaderBack onClick={noop} />}>Группы</PanelHeader><Groups api={api} /></Panel></View>
           <View id="queue" activePanel="queue"><Panel id="queue"><PanelHeader before={<PanelHeaderBack onClick={noop} />}>Очередь</PanelHeader><Queue api={api} /></Panel></View>
           <View id="tiktok" activePanel="tiktok"><Panel id="tiktok"><PanelHeader before={<PanelHeaderBack onClick={noop} />}>TikTok</PanelHeader><TikTok api={api} /></Panel></View>

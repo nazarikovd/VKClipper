@@ -32,13 +32,14 @@ export const AccountsProvider = ({ children }) => {
   };
 
   const removeAccount = async (userId) => {
-    // если бэк поддержит удаление
-    console.warn('removeAccount not implemented');
+    const response = await api.call('account.delAccount', { userId });
+    const del = response.response;
+    if (del) {
+      loadAccounts();
+      return true;
+    }
+    throw new Error('Failed to add account');
   };
-
-  useEffect(() => {
-    loadAccounts();
-  }, []);
 
   return (
     <AccountsContext.Provider value={{ accounts, loading, addAccount, removeAccount, refreshAccounts: loadAccounts }}>

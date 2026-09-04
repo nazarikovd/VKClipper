@@ -21,6 +21,7 @@ module.exports = class ClipperTikTok{
         return video.data
     }
 
+
     async _getVideoUrl(url){
         let req = await axios.post("https://www.tikwm.com/api/", { url, hd: 1 })
         if(req.data.code !== 0){
