@@ -36,8 +36,7 @@ const Logs = ({ api }) => {
         onClosed={() => setLogShowData(null)}
         dismissLabel="Отмена"
         actions={[
-          { title: 'Отмена', mode: 'cancel' },
-          { title: 'Удалить', mode: 'destructive' },
+          { title: 'Отмена', mode: 'cancel' }
         ]}
         title={title}
         description={data}
